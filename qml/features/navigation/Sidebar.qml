@@ -68,7 +68,7 @@ Rectangle {
 
         RowLayout {
             Layout.fillWidth: true
-            Layout.bottomMargin: 17
+            Layout.bottomMargin: 10
             spacing: 11
             AppIcon { }
             ColumnLayout {
@@ -102,8 +102,8 @@ Rectangle {
             Layout.preferredHeight: 48
             Layout.bottomMargin: 4
             radius: 8
-            color: projectMouseArea.containsMouse ? Theme.surfaceMuted : "#F6F7FA"
-            border.color: projectMenu.opened ? Theme.accent : Theme.separatorSoft
+            color: Theme.surface
+            border.color: (projectMenu.opened || projectMouseArea.containsMouse) ? Theme.accent : Theme.separatorSoft
             border.width: 1
 
             RowLayout {
@@ -135,10 +135,18 @@ Rectangle {
                         anchors.fill: parent
                         spacing: 8
 
-                        Text {
-                            text: "📁"
-                            font.pixelSize: Theme.fontSubheading
+                        Rectangle {
+                            Layout.preferredWidth: 26
+                            Layout.preferredHeight: 26
+                            radius: 6
+                            color: Theme.accentSoft
                             Layout.alignment: Qt.AlignVCenter
+                            Text {
+                                anchors.centerIn: parent
+                                text: "◫"
+                                font.pixelSize: 15
+                                color: Theme.accent
+                            }
                         }
 
                         ColumnLayout {
@@ -288,6 +296,12 @@ Rectangle {
             font.pixelSize: Theme.fontSecondary
             rightPadding: clearSearchBtn.visible ? 24 : 8
             onTextChanged: root.workspace.repositoryModel.filterText = text
+            background: Rectangle {
+                radius: 6
+                color: Theme.surface
+                border.color: repositorySearch.activeFocus ? Theme.accent : Theme.separatorSoft
+                border.width: 1
+            }
 
             Text {
                 id: clearSearchBtn
@@ -449,7 +463,13 @@ Rectangle {
                 height: 32
                 hoverEnabled: true
                 onClicked: root.workspace.checkoutBranch(modelData)
-                background: Rectangle { radius: 7; color: branchDelegate.hovered ? Theme.surfaceMuted : "transparent" }
+                readonly property bool isCurrent: branchDelegate.modelData === root.workspace.selectedBranch
+                background: Rectangle {
+                    radius: 6
+                    color: branchDelegate.isCurrent ? Theme.accentSoft : branchDelegate.hovered ? "#F8F9FA" : "transparent"
+                    border.color: branchDelegate.isCurrent ? Theme.accent : branchDelegate.hovered ? Theme.separatorSoft : "transparent"
+                    border.width: 1
+                }
                 contentItem: RowLayout {
                     spacing: 4
                     Text {

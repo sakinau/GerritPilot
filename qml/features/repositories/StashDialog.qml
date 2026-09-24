@@ -9,7 +9,7 @@ AppDialog {
     id: root
 
     property var workspace
-    preferredWidth: 520
+    preferredWidth: 640
     title: "贮藏管理"
     standardButtons: Dialog.Close
 
@@ -31,9 +31,10 @@ AppDialog {
             Rectangle {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 32
-                radius: 7
-                color: Theme.surfaceMuted
-                border.color: stashMsgInput.activeFocus ? Theme.accent : "transparent"
+                radius: 6
+                color: Theme.surface
+                border.color: stashMsgInput.activeFocus ? Theme.accent : Theme.separatorSoft
+                border.width: 1
 
                 TextInput {
                     id: stashMsgInput
@@ -88,7 +89,7 @@ AppDialog {
             ListView {
                 id: stashListView
                 width: parent.width
-                spacing: 4
+                spacing: 6
                 model: (root.workspace && root.workspace.stashList) ? root.workspace.stashList : []
 
                 delegate: Rectangle {
@@ -96,13 +97,20 @@ AppDialog {
                     required property int index
                     required property string modelData
                     width: stashListView.width
-                    height: 40
-                    radius: 7
-                    color: Theme.surfaceMuted
+                    height: 42
+                    radius: 6
+                    color: stashRowHover.hovered ? "#F8F9FA" : Theme.surface
+                    border.color: stashRowHover.hovered ? Theme.accentSoft : Theme.separatorSoft
+                    border.width: 1
+
+                    HoverHandler {
+                        id: stashRowHover
+                    }
 
                     RowLayout {
                         anchors.fill: parent
-                        anchors.margins: 6
+                        anchors.leftMargin: 10
+                        anchors.rightMargin: 8
                         spacing: 8
 
                         Text {
@@ -111,11 +119,15 @@ AppDialog {
                             font.pixelSize: Theme.fontSecondary
                             elide: Text.ElideRight
                             Layout.fillWidth: true
+                            Layout.minimumWidth: 0
                         }
 
                         PrimaryButton {
                             text: "应用"
                             secondary: true
+                            implicitHeight: 26
+                            implicitWidth: 52
+                            font.pixelSize: Theme.fontCaption
                             enabled: root.workspace && !root.workspace.busy
                             onClicked: root.workspace.stashApply(stashItemRow.index, root.workspace.stashSha(stashItemRow.index))
                         }
@@ -123,6 +135,9 @@ AppDialog {
                         PrimaryButton {
                             text: "弹出"
                             secondary: true
+                            implicitHeight: 26
+                            implicitWidth: 52
+                            font.pixelSize: Theme.fontCaption
                             enabled: root.workspace && !root.workspace.busy
                             onClicked: root.workspace.stashPop(stashItemRow.index, root.workspace.stashSha(stashItemRow.index))
                         }
@@ -131,6 +146,9 @@ AppDialog {
                             text: "删除"
                             danger: true
                             secondary: true
+                            implicitHeight: 26
+                            implicitWidth: 52
+                            font.pixelSize: Theme.fontCaption
                             enabled: root.workspace && !root.workspace.busy
                             onClicked: {
                                 stashDropConfirmDialog.dropIndex = stashItemRow.index

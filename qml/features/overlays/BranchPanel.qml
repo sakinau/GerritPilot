@@ -102,7 +102,13 @@ Item {
                             branchConfirmDialog.open()
                         }
                     }
-                    background: Rectangle { radius: 9; color: branchDelegate.hovered ? Theme.surfaceMuted : "transparent" }
+                    readonly property bool isCurrent: branchDelegate.modelData === root.workspace.selectedBranch
+                    background: Rectangle {
+                        radius: 6
+                        color: branchDelegate.isCurrent ? Theme.accentSoft : branchDelegate.hovered ? "#F8F9FA" : "transparent"
+                        border.color: branchDelegate.isCurrent ? Theme.accent : branchDelegate.hovered ? Theme.separatorSoft : "transparent"
+                        border.width: 1
+                    }
                     contentItem: RowLayout {
                         spacing: 9
                         Text {

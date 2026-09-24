@@ -34,7 +34,13 @@ Item {
         orientation: Qt.Horizontal
         handle: Rectangle {
             implicitWidth: 6
-            color: SplitHandle.pressed ? Theme.accent : SplitHandle.hovered ? Theme.accentSoft : Theme.sidebar
+            color: "transparent"
+            Rectangle {
+                anchors.centerIn: parent
+                width: (SplitHandle.pressed || SplitHandle.hovered) ? 2 : 1
+                height: parent.height
+                color: (SplitHandle.pressed || SplitHandle.hovered) ? Theme.accent : Theme.separator
+            }
         }
 
         Sidebar {

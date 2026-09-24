@@ -119,10 +119,12 @@ GlassCard {
                     visible: root.workspace.selectedPath.length > 0
                     Rectangle {
                         objectName: "headerBranchButton"
-                        color: branchMouse.containsMouse ? Theme.accentSoft : Theme.surfaceMuted
+                        color: branchMouse.containsMouse ? Theme.accentSoft : "#F0F4FA"
+                        border.color: branchMouse.containsMouse ? Theme.accent : Theme.separatorSoft
+                        border.width: 1
                         radius: 6
-                        implicitWidth: branchRow.implicitWidth + 12
-                        implicitHeight: 22
+                        implicitWidth: branchRow.implicitWidth + 14
+                        implicitHeight: 24
                         RowLayout {
                             id: branchRow
                             anchors.centerIn: parent
@@ -173,23 +175,31 @@ GlassCard {
             IconButton {
                 glyph: "↻"
                 toolTip: "刷新当前仓库状态"
+                implicitHeight: 32
+                implicitWidth: 32
                 enabled: root.workspace && !root.workspace.busy
                 onClicked: root.workspace.refreshActive()
             }
             IconButton {
                 glyph: "⌘"
                 toolTip: "命令日志"
+                implicitHeight: 32
+                implicitWidth: 32
                 onClicked: root.openCommandPanel()
             }
             IconButton {
                 glyph: "⚙"
                 toolTip: "设置"
+                implicitHeight: 32
+                implicitWidth: 32
                 onClicked: root.settingsRequested()
             }
             IconButton {
                 visible: !root.compactActions
                 glyph: "▣"
                 toolTip: "贮藏管理"
+                implicitHeight: 32
+                implicitWidth: 32
                 enabled: !root.workspace.busy && root.workspace.selectedPath.length > 0
                 onClicked: {
                     root.workspace.loadStashList()
@@ -200,6 +210,8 @@ GlassCard {
                 visible: !root.compactActions
                 glyph: root.workspace.selectedIgnored ? "⊕" : "⊖"
                 toolTip: root.workspace.selectedIgnored ? "恢复仓库显示" : "隐藏当前仓库（可在设置中恢复）"
+                implicitHeight: 32
+                implicitWidth: 32
                 enabled: root.workspace.selectedPath.length > 0
                 onClicked: root.workspace.setActiveRepositoryIgnored(!root.workspace.selectedIgnored)
             }
@@ -207,6 +219,8 @@ GlassCard {
                 visible: root.compactActions
                 glyph: "⋯"
                 toolTip: "仓库选项"
+                implicitHeight: 32
+                implicitWidth: 32
                 onClicked: repositoryMenu.open()
                 Menu {
                     id: repositoryMenu
@@ -226,193 +240,242 @@ GlassCard {
             }
         }
 
-        Rectangle {
+        // Consolidated Secondary Toolbar (Segmented Tabs + Contextual Actions)
+        RowLayout {
             Layout.fillWidth: true
-            Layout.preferredHeight: 38
-            radius: 11
-            color: Theme.surfaceMuted
-            RowLayout {
-                anchors.fill: parent
-                anchors.margins: 3
-                spacing: 3
-                Repeater {
-                    model: ["工作区改动", "提交历史"]
-                    Button {
-                        id: tabButton
-                        required property int index
-                        required property string modelData
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        text: modelData
-                        padding: 0
-                        topInset: 0
-                        bottomInset: 0
-                        leftInset: 0
-                        rightInset: 0
-                        hoverEnabled: true
-                        onClicked: root.tabRequested(index)
-                        background: Rectangle {
-                            radius: 9
-                            color: root.currentTab === tabButton.index ? Theme.surfaceStrong : tabButton.hovered ? Theme.surfaceMuted : "transparent"
-                            border.color: root.currentTab === tabButton.index ? Theme.separatorSoft : "transparent"
-                        }
-                        contentItem: Text {
-                            text: tabButton.text
-                            color: root.currentTab === tabButton.index ? Theme.text : Theme.secondaryText
-                            font.pixelSize: Theme.fontBody
-                            font.weight: root.currentTab === tabButton.index ? Font.DemiBold : Font.Medium
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                        }
-                        MouseArea {
-                            anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
-                            acceptedButtons: Qt.NoButton
+            Layout.preferredHeight: 32
+            spacing: 10
+
+            // Compact Segmented Control
+            Rectangle {
+                Layout.preferredWidth: 220
+                Layout.fillHeight: true
+                radius: 7
+                color: "#EEF0F4"
+                border.color: Theme.separatorSoft
+                border.width: 1
+
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.margins: 2
+                    spacing: 2
+
+                    Repeater {
+                        model: ["工作区改动", "提交历史"]
+                        Button {
+                            id: tabButton
+                            required property int index
+                            required property string modelData
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            text: modelData
+                            padding: 0
+                            hoverEnabled: true
+                            onClicked: root.tabRequested(index)
+                            background: Rectangle {
+                                radius: 5
+                                color: root.currentTab === tabButton.index ? Theme.surfaceStrong : (tabButton.hovered ? "#F8F9FA" : "transparent")
+                                border.color: root.currentTab === tabButton.index ? Theme.separatorSoft : "transparent"
+                                border.width: root.currentTab === tabButton.index ? 1 : 0
+                            }
+                            contentItem: Text {
+                                text: tabButton.text
+                                color: root.currentTab === tabButton.index ? Theme.text : Theme.secondaryText
+                                font.pixelSize: Theme.fontBody
+                                font.weight: root.currentTab === tabButton.index ? Font.DemiBold : Font.Medium
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
                         }
                     }
                 }
             }
-        }
 
-        RowLayout {
-            visible: root.currentTab === 0
-            Layout.fillWidth: true
-            spacing: 8
-            Text {
-                text: root.workspace.selectedFile.length
-                    ? root.workspace.selectedFile + (root.workspace.selectedFileStaged ? " · 已暂存" : " · 工作区")
-                    : "代码差异"
-                elide: Text.ElideMiddle
-                color: Theme.secondaryText
-                font.pixelSize: Theme.fontSecondary
+            // Tab 0 Contextual Controls: Diff Toolbar
+            RowLayout {
+                visible: root.currentTab === 0
                 Layout.fillWidth: true
-            }
-            Button {
-                id: workingTreeButton
-                text: "工作区改动"
-                implicitWidth: 88
-                implicitHeight: 30
-                padding: 0
-                topInset: 0
-                bottomInset: 0
-                leftInset: 0
-                rightInset: 0
-                hoverEnabled: true
-                onClicked: root.workingTreeRequested()
-                background: Rectangle { radius: 7; color: workingTreeButton.down ? "#DCEBFA" : workingTreeButton.hovered ? Theme.accentSoft : "transparent" }
-                contentItem: Text {
-                    text: workingTreeButton.text
-                    color: Theme.accent
+                Layout.fillHeight: true
+                spacing: 8
+
+                Text {
+                    text: root.workspace.selectedFile.length
+                        ? root.workspace.selectedFile + (root.workspace.selectedFileStaged ? " · 已暂存" : " · 工作区")
+                        : "代码差异"
+                    elide: Text.ElideMiddle
+                    color: Theme.secondaryText
+                    font.pixelSize: Theme.fontSecondary
+                    Layout.fillWidth: true
+                }
+                Button {
+                    id: workingTreeButton
+                    text: "工作区改动"
+                    implicitWidth: 80
+                    implicitHeight: 28
+                    padding: 0
+                    hoverEnabled: true
+                    onClicked: root.workingTreeRequested()
+                    background: Rectangle {
+                        radius: 6
+                        color: workingTreeButton.down ? "#DCEBFA" : workingTreeButton.hovered ? Theme.accentSoft : "transparent"
+                        border.color: workingTreeButton.hovered ? Theme.accent : "transparent"
+                        border.width: 1
+                    }
+                    contentItem: Text {
+                        text: workingTreeButton.text
+                        color: Theme.accent
+                        font.pixelSize: Theme.fontCaption
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                }
+                Text {
+                    objectName: "staleStatusLabel"
+                    visible: root.workspace.detailsCached
+                    text: "状态未验证"
+                    color: Theme.orange
                     font.pixelSize: Theme.fontCaption
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
                 }
-                MouseArea {
-                    anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
-                    acceptedButtons: Qt.NoButton
+                FileActionButton {
+                    objectName: "refreshRepositoryButton"
+                    text: "↻"
+                    toolTip: "刷新当前仓库"
+                    enabled: !root.workspace.busy && root.workspace.selectedPath.length > 0
+                    onClicked: root.workspace.refreshActive()
+                }
+                Rectangle { Layout.preferredWidth: 1; Layout.preferredHeight: 16; color: Theme.separatorSoft }
+                ToolButton {
+                    id: unifiedButton
+                    text: "统一"
+                    implicitWidth: 46
+                    implicitHeight: 28
+                    padding: 0
+                    hoverEnabled: true
+                    checkable: true
+                    checked: !root.sideBySideDiff
+                    onClicked: root.sideBySideDiff = false
+                    background: Rectangle {
+                        radius: 6
+                        color: unifiedButton.checked ? Theme.accentSoft : (unifiedButton.hovered ? "#F8F9FA" : "transparent")
+                        border.color: unifiedButton.checked ? Theme.accent : "transparent"
+                        border.width: 1
+                    }
+                    contentItem: Text {
+                        text: unifiedButton.text
+                        color: unifiedButton.checked ? Theme.accent : Theme.secondaryText
+                        font.pixelSize: Theme.fontCaption
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                }
+                ToolButton {
+                    id: splitButton
+                    text: "左右对比"
+                    implicitWidth: 68
+                    implicitHeight: 28
+                    padding: 0
+                    hoverEnabled: true
+                    checkable: true
+                    checked: root.sideBySideDiff
+                    onClicked: root.sideBySideDiff = true
+                    background: Rectangle {
+                        radius: 6
+                        color: splitButton.checked ? Theme.accentSoft : (splitButton.hovered ? "#F8F9FA" : "transparent")
+                        border.color: splitButton.checked ? Theme.accent : "transparent"
+                        border.width: 1
+                    }
+                    contentItem: Text {
+                        text: splitButton.text
+                        color: splitButton.checked ? Theme.accent : Theme.secondaryText
+                        font.pixelSize: Theme.fontCaption
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                }
+                ToolButton {
+                    id: whitespaceButton
+                    text: "忽略空白"
+                    implicitWidth: 68
+                    implicitHeight: 28
+                    padding: 0
+                    hoverEnabled: true
+                    checkable: true
+                    checked: root.workspace ? Boolean(root.workspace.ignoreWhitespace) : false
+                    onClicked: {
+                        if (root.workspace)
+                            root.workspace.ignoreWhitespace = !root.workspace.ignoreWhitespace
+                    }
+                    background: Rectangle {
+                        radius: 6
+                        color: whitespaceButton.checked ? Theme.accentSoft : (whitespaceButton.hovered ? "#F8F9FA" : "transparent")
+                        border.color: whitespaceButton.checked ? Theme.accent : "transparent"
+                        border.width: 1
+                    }
+                    contentItem: Text {
+                        text: whitespaceButton.text
+                        color: whitespaceButton.checked ? Theme.accent : Theme.secondaryText
+                        font.pixelSize: Theme.fontCaption
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
                 }
             }
-            Text {
-                objectName: "staleStatusLabel"
-                visible: root.workspace.detailsCached
-                text: "状态未验证"
-                color: Theme.orange
-                font.pixelSize: Theme.fontCaption
-            }
-            FileActionButton {
-                objectName: "refreshRepositoryButton"
-                text: "↻"
-                toolTip: "刷新当前仓库"
-                enabled: !root.workspace.busy && root.workspace.selectedPath.length > 0
-                onClicked: root.workspace.refreshActive()
-            }
-            Rectangle { Layout.preferredWidth: 1; Layout.preferredHeight: 17; color: Theme.separator }
-            ToolButton {
-                id: unifiedButton
-                text: "统一"
-                implicitWidth: 50
-                implicitHeight: 30
-                padding: 0
-                topInset: 0
-                bottomInset: 0
-                leftInset: 0
-                rightInset: 0
-                hoverEnabled: true
-                checkable: true
-                checked: !root.sideBySideDiff
-                onClicked: root.sideBySideDiff = false
-                background: Rectangle { radius: 7; color: unifiedButton.checked ? Theme.accentSoft : unifiedButton.hovered ? Theme.surfaceMuted : "transparent" }
-                contentItem: Text {
-                    text: unifiedButton.text
-                    color: unifiedButton.checked ? Theme.accent : Theme.secondaryText
-                    font.pixelSize: Theme.fontCaption
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
-                MouseArea {
-                    anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
-                    acceptedButtons: Qt.NoButton
-                }
-            }
-            ToolButton {
-                id: splitButton
-                text: "左右对比"
-                implicitWidth: 72
-                implicitHeight: 30
-                padding: 0
-                topInset: 0
-                bottomInset: 0
-                leftInset: 0
-                rightInset: 0
-                hoverEnabled: true
-                checkable: true
-                checked: root.sideBySideDiff
-                onClicked: root.sideBySideDiff = true
-                background: Rectangle { radius: 7; color: splitButton.checked ? Theme.accentSoft : splitButton.hovered ? Theme.surfaceMuted : "transparent" }
-                contentItem: Text {
-                    text: splitButton.text
-                    color: splitButton.checked ? Theme.accent : Theme.secondaryText
-                    font.pixelSize: Theme.fontCaption
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
-                MouseArea {
-                    anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
-                    acceptedButtons: Qt.NoButton
-                }
-            }
-            ToolButton {
-                id: whitespaceButton
-                text: "忽略空白"
-                implicitWidth: 72
-                implicitHeight: 30
-                padding: 0
-                topInset: 0
-                bottomInset: 0
-                leftInset: 0
-                rightInset: 0
-                hoverEnabled: true
-                checkable: true
-                checked: root.workspace ? Boolean(root.workspace.ignoreWhitespace) : false
-                onClicked: {
-                    if (root.workspace)
-                        root.workspace.ignoreWhitespace = !root.workspace.ignoreWhitespace
-                }
-                background: Rectangle { radius: 7; color: whitespaceButton.checked ? Theme.accentSoft : whitespaceButton.hovered ? Theme.surfaceMuted : "transparent" }
-                contentItem: Text {
-                    text: whitespaceButton.text
-                    color: whitespaceButton.checked ? Theme.accent : Theme.secondaryText
-                    font.pixelSize: Theme.fontCaption
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
-                MouseArea {
-                    anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
-                    acceptedButtons: Qt.NoButton
+
+            // Tab 1 Contextual Controls: History Search Filter
+            RowLayout {
+                visible: root.currentTab === 1
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                spacing: 8
+
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 30
+                    radius: 6
+                    color: Theme.surface
+                    border.color: historyFilterInput.activeFocus ? Theme.accent : Theme.separatorSoft
+                    border.width: 1
+
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 8
+                        anchors.rightMargin: 6
+                        spacing: 4
+
+                        Text {
+                            text: "🔍"
+                            font.pixelSize: Theme.fontSecondary
+                            color: Theme.tertiaryText
+                        }
+
+                        TextInput {
+                            id: historyFilterInput
+                            Layout.fillWidth: true
+                            font.pixelSize: Theme.fontSecondary
+                            color: Theme.text
+                            clip: true
+                            selectByMouse: true
+                            onTextChanged: historyPane.searchFilter = text
+
+                            Text {
+                                anchors.fill: parent
+                                text: "按说明、作者或 SHA 筛选已加载历史..."
+                                color: Theme.placeholder
+                                font.pixelSize: Theme.fontSecondary
+                                visible: !historyFilterInput.text.length && !historyFilterInput.activeFocus
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                        }
+
+                        IconButton {
+                            visible: historyFilterInput.text.length > 0
+                            glyph: "✕"
+                            toolTip: "清除筛选"
+                            implicitWidth: 20
+                            implicitHeight: 20
+                            onClicked: historyFilterInput.text = ""
+                        }
+                    }
                 }
             }
         }
@@ -498,7 +561,13 @@ GlassCard {
                 clip: true
                 handle: Rectangle {
                     implicitWidth: 6
-                    color: SplitHandle.pressed ? Theme.accent : SplitHandle.hovered ? Theme.accentSoft : Theme.separatorSoft
+                    color: "transparent"
+                    Rectangle {
+                        anchors.centerIn: parent
+                        width: (SplitHandle.pressed || SplitHandle.hovered) ? 2 : 1
+                        height: parent.height
+                        color: (SplitHandle.pressed || SplitHandle.hovered) ? Theme.accent : Theme.separatorSoft
+                    }
                 }
                 GlassCard {
                     objectName: "changesFilesPane"
@@ -516,7 +585,13 @@ GlassCard {
                         clip: true
                         handle: Rectangle {
                             implicitHeight: 6
-                            color: SplitHandle.pressed ? Theme.accent : SplitHandle.hovered ? Theme.accentSoft : Theme.separatorSoft
+                            color: "transparent"
+                            Rectangle {
+                                anchors.centerIn: parent
+                                height: (SplitHandle.pressed || SplitHandle.hovered) ? 2 : 1
+                                width: parent.width
+                                color: (SplitHandle.pressed || SplitHandle.hovered) ? Theme.accent : Theme.separatorSoft
+                            }
                         }
                     ChangesFileList {
                         id: changesFileList

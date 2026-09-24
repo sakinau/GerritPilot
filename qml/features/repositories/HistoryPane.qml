@@ -31,66 +31,19 @@ ColumnLayout {
         })
     }
 
-    // Filter Bar for history
-    RowLayout {
-        Layout.fillWidth: true
-        spacing: 8
-
-        Rectangle {
-            Layout.fillWidth: true
-            Layout.preferredHeight: 30
-            radius: 7
-            color: Theme.surfaceMuted
-            border.color: historyFilterInput.activeFocus ? Theme.accent : "transparent"
-
-            RowLayout {
-                anchors.fill: parent
-                anchors.leftMargin: 8
-                anchors.rightMargin: 6
-                spacing: 4
-
-                Text {
-                    text: "🔍"
-                    font.pixelSize: Theme.fontSecondary
-                    color: Theme.tertiaryText
-                }
-
-                TextInput {
-                    id: historyFilterInput
-                    Layout.fillWidth: true
-                    font.pixelSize: Theme.fontSecondary
-                    color: Theme.text
-                    clip: true
-                    selectByMouse: true
-                    onTextChanged: root.searchFilter = text
-
-                    Text {
-                        anchors.fill: parent
-                        text: "按说明、作者或 SHA 筛选已加载历史..."
-                        color: Theme.placeholder
-                        font.pixelSize: Theme.fontSecondary
-                        visible: !historyFilterInput.text.length && !historyFilterInput.activeFocus
-                        verticalAlignment: Text.AlignVCenter
-                    }
-                }
-
-                IconButton {
-                    visible: historyFilterInput.text.length > 0
-                    glyph: "✕"
-                    toolTip: "清除筛选"
-                    onClicked: historyFilterInput.text = ""
-                }
-            }
-        }
-    }
-
     SplitView {
         Layout.fillWidth: true
         Layout.fillHeight: true
         orientation: Qt.Vertical
         handle: Rectangle {
             implicitHeight: 6
-            color: SplitHandle.pressed ? Theme.accent : SplitHandle.hovered ? Theme.accentSoft : Theme.separatorSoft
+            color: "transparent"
+            Rectangle {
+                anchors.centerIn: parent
+                height: (SplitHandle.pressed || SplitHandle.hovered) ? 2 : 1
+                width: parent.width
+                color: (SplitHandle.pressed || SplitHandle.hovered) ? Theme.accent : Theme.separatorSoft
+            }
         }
         ColumnLayout {
             SplitView.preferredHeight: root.height * 0.48
@@ -101,24 +54,42 @@ ColumnLayout {
         Layout.fillWidth: true
         Layout.fillHeight: true
         clip: true
-        spacing: 2
+        spacing: 4
         objectName: "historyList"
         model: root.filteredEntries
         ScrollBar.vertical: RightScrollBar { }
         delegate: ItemDelegate {
             id: historyDelegate
             required property var modelData
+            readonly property bool isSelected: root.workspace && root.workspace.selectedRevision === historyDelegate.modelData.revision
             width: historyList.width
             height: 56
             hoverEnabled: true
+            leftPadding: 12
+            rightPadding: 10
+            topPadding: 6
+            bottomPadding: 6
             onClicked: {
                 const revision = historyDelegate.modelData.revision
                 if (revision.length)
                     root.revisionRequested(revision)
             }
             background: Rectangle {
-                radius: 9
-                color: historyDelegate.hovered ? Theme.surfaceMuted : "transparent"
+                radius: 6
+                color: historyDelegate.isSelected ? Theme.accentSoft : (historyDelegate.hovered ? "#F8F9FA" : "transparent")
+                border.color: historyDelegate.isSelected ? Theme.accent : (historyDelegate.hovered ? Theme.separatorSoft : "transparent")
+                border.width: 1
+
+                Rectangle {
+                    visible: historyDelegate.isSelected
+                    anchors.left: parent.left
+                    anchors.top: parent.top
+                    anchors.bottom: parent.bottom
+                    anchors.margins: 4
+                    width: 3
+                    radius: 1.5
+                    color: Theme.accent
+                }
             }
             contentItem: ColumnLayout {
                 spacing: 2
@@ -240,6 +211,16 @@ ColumnLayout {
         Layout.fillWidth: true
         Layout.fillHeight: true
         orientation: Qt.Horizontal
+        handle: Rectangle {
+            implicitWidth: 6
+            color: "transparent"
+            Rectangle {
+                anchors.centerIn: parent
+                width: (SplitHandle.pressed || SplitHandle.hovered) ? 2 : 1
+                height: parent.height
+                color: (SplitHandle.pressed || SplitHandle.hovered) ? Theme.accent : Theme.separatorSoft
+            }
+        }
         ListView {
             id: files
             SplitView.preferredWidth: 260

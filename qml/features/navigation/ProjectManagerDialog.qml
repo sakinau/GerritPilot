@@ -12,7 +12,7 @@ AppDialog {
     property var repoManager
     property int currentTab: 0
 
-    preferredWidth: 740
+    preferredWidth: 720
     title: "项目与工作区生命周期管理"
     standardButtons: Dialog.Close
 
@@ -44,7 +44,7 @@ AppDialog {
         },
         {
             id: "CUSTOM",
-            label: "✎ 自定义",
+            label: "自定义",
             tip: "自定义项目与分支配置"
         }
     ]
@@ -125,14 +125,16 @@ AppDialog {
 
     contentItem: ColumnLayout {
         spacing: 10
-        implicitHeight: 580
+        implicitHeight: 600
 
         // ================= Navigation Tabs =================
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 38
             radius: 8
-            color: Theme.surfaceMuted
+            color: "#EEF0F4"
+            border.color: Theme.separatorSoft
+            border.width: 1
 
             RowLayout {
                 anchors.fill: parent
@@ -149,7 +151,7 @@ AppDialog {
 
                     Text {
                         anchors.centerIn: parent
-                        text: "⚡ 智能拉取与新建"
+                        text: "智能拉取与新建"
                         font.pixelSize: Theme.fontBody
                         font.weight: root.currentTab === 0 ? Font.DemiBold : Font.Normal
                         color: root.currentTab === 0 ? Theme.accent : Theme.secondaryText
@@ -172,7 +174,7 @@ AppDialog {
 
                     Text {
                         anchors.centerIn: parent
-                        text: "🎯 当前项目客户链诊断与同步"
+                        text: "客户链诊断与同步"
                         font.pixelSize: Theme.fontBody
                         font.weight: root.currentTab === 1 ? Font.DemiBold : Font.Normal
                         color: root.currentTab === 1 ? Theme.accent : Theme.secondaryText
@@ -198,7 +200,7 @@ AppDialog {
 
                     Text {
                         anchors.centerIn: parent
-                        text: "📁 已保存项目 (" + ((root.workspace && root.workspace.projectManager && root.workspace.projectManager.projectList) ? root.workspace.projectManager.projectList.length : 0) + ")"
+                        text: "已保存项目 (" + ((root.workspace && root.workspace.projectManager && root.workspace.projectManager.projectList) ? root.workspace.projectManager.projectList.length : 0) + ")"
                         font.pixelSize: Theme.fontBody
                         font.weight: root.currentTab === 2 ? Font.DemiBold : Font.Normal
                         color: root.currentTab === 2 ? Theme.accent : Theme.secondaryText
@@ -215,15 +217,17 @@ AppDialog {
 
         // ================= Tab 0: Smart Pull & Create =================
         ScrollView {
+            id: tab0Scroll
             visible: root.currentTab === 0
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true
+            contentWidth: availableWidth
             ScrollBar.vertical: RightScrollBar { }
 
             ColumnLayout {
-                width: parent.width
-                spacing: 10
+                width: tab0Scroll.availableWidth
+                spacing: 12
 
                 // Platform Chips
                 ColumnLayout {
@@ -231,13 +235,13 @@ AppDialog {
                     spacing: 6
 
                     Text {
-                        text: "① 目标车型平台快捷选择："
+                        text: "目标车型平台快捷选择："
                         font.pixelSize: Theme.fontSecondary
                         font.weight: Font.DemiBold
                         color: Theme.text
                     }
 
-                    RowLayout {
+                    Flow {
                         Layout.fillWidth: true
                         spacing: 8
 
@@ -246,13 +250,13 @@ AppDialog {
                             delegate: Rectangle {
                                 id: presetChip
                                 required property var modelData
-                                Layout.preferredHeight: 30
-                                Layout.preferredWidth: chipText.implicitWidth + 24
+                                height: 30
+                                width: chipText.implicitWidth + 24
                                 radius: 15
                                 readonly property bool isSelected: root.selectedPresetId.toUpperCase() === modelData.id.toUpperCase()
-                                color: isSelected ? Theme.accentSoft : (chipMouse.containsMouse ? Theme.surfaceMuted : "#F4F5F8")
-                                border.color: isSelected ? Theme.accent : (chipMouse.containsMouse ? Theme.separatorSoft : "transparent")
-                                border.width: isSelected ? 1.5 : 1
+                                color: isSelected ? Theme.accentSoft : (chipMouse.containsMouse ? "#F8F9FA" : Theme.surface)
+                                border.color: isSelected ? Theme.accent : (chipMouse.containsMouse ? Theme.separator : Theme.separatorSoft)
+                                border.width: 1
 
                                 Text {
                                     id: chipText
@@ -272,8 +276,6 @@ AppDialog {
                                 }
                             }
                         }
-
-                        Item { Layout.fillWidth: true }
                     }
                 }
 
@@ -283,7 +285,7 @@ AppDialog {
                     spacing: 8
 
                     Text {
-                        text: "② 或选择 Gerrit 远端 HMI 分支："
+                        text: "或选择 Gerrit 远端 HMI 分支："
                         font.pixelSize: Theme.fontCaption
                         color: Theme.secondaryText
                     }
@@ -301,7 +303,7 @@ AppDialog {
                     }
 
                     PrimaryButton {
-                        text: (root.repoManager && root.repoManager.indexingBranches) ? "⏳ 索引中…" : "🔄 刷新远端分支"
+                        text: (root.repoManager && root.repoManager.indexingBranches) ? "索引中…" : "刷新远端分支"
                         secondary: true
                         enabled: !root.repoManager || !root.repoManager.indexingBranches
                         implicitHeight: 32
@@ -330,7 +332,7 @@ AppDialog {
                             Layout.fillWidth: true
                             spacing: 6
                             Text {
-                                text: "✨ 自动解析与客户链对齐规则"
+                                text: "自动解析与客户链对齐规则"
                                 font.pixelSize: Theme.fontSecondary
                                 font.weight: Font.DemiBold
                                 color: Theme.accent
@@ -520,8 +522,8 @@ AppDialog {
 
                     PrimaryButton {
                         text: (root.repoManager && root.repoManager.busy)
-                            ? ("⏳ " + root.repoManager.activeTask)
-                            : "🚀 智能一键拉取并创建项目"
+                            ? root.repoManager.activeTask
+                            : "一键拉取并创建项目"
                         enabled: (!root.repoManager || !root.repoManager.busy)
                             && createProjPath.text.trim().length > 0
                         implicitHeight: 36
@@ -557,7 +559,7 @@ AppDialog {
 
                     IconButton {
                         visible: root.repoManager && root.repoManager.log.length > 0
-                        glyph: root.showExecutionLog ? "📋" : "📄"
+                        glyph: root.showExecutionLog ? "⊟" : "⊞"
                         toolTip: root.showExecutionLog ? "隐藏实时日志" : "查看实时日志"
                         onClicked: root.showExecutionLog = !root.showExecutionLog
                     }
@@ -567,21 +569,23 @@ AppDialog {
 
         // ================= Tab 1: Current Project Diagnostics & Manifest Sync =================
         ScrollView {
+            id: tab1Scroll
             visible: root.currentTab === 1
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true
+            contentWidth: availableWidth
             ScrollBar.vertical: RightScrollBar { }
 
             ColumnLayout {
-                width: parent.width
+                width: tab1Scroll.availableWidth
                 spacing: 12
 
                 // Card 1: Current Project Info
                 Rectangle {
                     Layout.fillWidth: true
                     radius: 8
-                    color: Theme.surfaceMuted
+                    color: Theme.surface
                     border.color: Theme.separatorSoft
                     border.width: 1
                     implicitHeight: curProjInfoCol.implicitHeight + 20
@@ -595,8 +599,6 @@ AppDialog {
                         RowLayout {
                             Layout.fillWidth: true
                             spacing: 8
-
-                            Text { text: "📦"; font.pixelSize: Theme.fontSubheading }
 
                             Text {
                                 text: (root.workspace && root.workspace.projectManager && root.workspace.projectManager.currentProjectName)
@@ -678,7 +680,7 @@ AppDialog {
                             Layout.fillWidth: true
                             spacing: 6
                             Text {
-                                text: "🔍 智能诊断与一键修复"
+                                text: "智能诊断与修复"
                                 font.pixelSize: Theme.fontSecondary
                                 font.weight: Font.DemiBold
                                 color: Theme.accent
@@ -704,7 +706,7 @@ AppDialog {
                             spacing: 8
 
                             PrimaryButton {
-                                text: (root.repoManager && root.repoManager.busy) ? "⏳ 执行中…" : "🚀 智能诊断并修复当前项目"
+                                text: (root.repoManager && root.repoManager.busy) ? "执行中…" : "智能诊断并修复"
                                 enabled: !root.repoManager || !root.repoManager.busy
                                 Layout.fillWidth: true
                                 implicitHeight: 34
@@ -717,7 +719,7 @@ AppDialog {
                             }
 
                             PrimaryButton {
-                                text: "🤖 AI 深度诊断与修复"
+                                text: "AI 深度诊断与修复"
                                 secondary: true
                                 enabled: !root.repoManager || !root.repoManager.busy
                                 implicitHeight: 34
@@ -736,7 +738,7 @@ AppDialog {
                 Rectangle {
                     Layout.fillWidth: true
                     radius: 8
-                    color: Theme.surfaceMuted
+                    color: Theme.surface
                     border.color: Theme.separatorSoft
                     border.width: 1
                     implicitHeight: platAlignCol.implicitHeight + 20
@@ -748,13 +750,13 @@ AppDialog {
                         spacing: 8
 
                         Text {
-                            text: "🎯 快速对齐到目标平台客户链："
+                            text: "快速对齐到目标平台客户链："
                             font.pixelSize: Theme.fontSecondary
                             font.weight: Font.DemiBold
                             color: Theme.text
                         }
 
-                        RowLayout {
+                        Flow {
                             Layout.fillWidth: true
                             spacing: 8
 
@@ -763,13 +765,13 @@ AppDialog {
                                 delegate: Rectangle {
                                     id: diagPlatChip
                                     required property string modelData
-                                    Layout.preferredHeight: 28
-                                    Layout.preferredWidth: diagChipText.implicitWidth + 20
+                                    height: 28
+                                    width: diagChipText.implicitWidth + 20
                                     radius: 14
                                     readonly property bool isSelected: root.diagSelectedPlat.toUpperCase() === modelData.toUpperCase()
-                                    color: isSelected ? Theme.accentSoft : (diagChipMouse.containsMouse ? "#E8F0FE" : Theme.surface)
-                                    border.color: isSelected ? Theme.accent : "#C2D7EF"
-                                    border.width: isSelected ? 1.5 : 1
+                                    color: isSelected ? Theme.accentSoft : (diagChipMouse.containsMouse ? "#F8F9FA" : Theme.surface)
+                                    border.color: isSelected ? Theme.accent : (diagChipMouse.containsMouse ? Theme.separator : Theme.separatorSoft)
+                                    border.width: 1
 
                                     Text {
                                         id: diagChipText
@@ -793,8 +795,6 @@ AppDialog {
                                     }
                                 }
                             }
-
-                            Item { Layout.fillWidth: true }
                         }
 
                         RowLayout {
@@ -1007,9 +1007,10 @@ AppDialog {
                 Rectangle {
                     Layout.preferredWidth: 140
                     Layout.preferredHeight: 32
-                    radius: 7
-                    color: Theme.surfaceMuted
-                    border.color: importProjectName.activeFocus ? Theme.accent : "transparent"
+                    radius: 6
+                    color: Theme.surface
+                    border.color: importProjectName.activeFocus ? Theme.accent : Theme.separatorSoft
+                    border.width: 1
 
                     TextInput {
                         id: importProjectName
@@ -1034,9 +1035,10 @@ AppDialog {
                 Rectangle {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 32
-                    radius: 7
-                    color: Theme.surfaceMuted
-                    border.color: importProjectPath.activeFocus ? Theme.accent : "transparent"
+                    radius: 6
+                    color: Theme.surface
+                    border.color: importProjectPath.activeFocus ? Theme.accent : Theme.separatorSoft
+                    border.width: 1
 
                     TextInput {
                         id: importProjectPath
@@ -1088,92 +1090,43 @@ AppDialog {
                 color: Theme.text
             }
 
-            ScrollView {
+            ListView {
+                id: projListView
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 clip: true
+                spacing: 6
+                model: (root.workspace && root.workspace.projectManager && root.workspace.projectManager.projectList) ? root.workspace.projectManager.projectList : []
                 ScrollBar.vertical: RightScrollBar { }
 
-                ListView {
-                    id: projListView
-                    width: parent.width
-                    spacing: 6
-                    model: (root.workspace && root.workspace.projectManager && root.workspace.projectManager.projectList) ? root.workspace.projectManager.projectList : []
+                delegate: Rectangle {
+                    id: projItemRow
+                    required property int index
+                    required property var modelData
+                    width: projListView.width
+                    height: 52
+                    radius: 6
+                    readonly property bool isActive: (root.workspace && root.workspace.projectManager)
+                        ? root.workspace.projectManager.currentIndex === projItemRow.index
+                        : false
+                    color: isActive ? Theme.accentSoft : (rowMouseArea.containsMouse ? "#F8F9FA" : Theme.surface)
+                    border.color: isActive ? Theme.accent : (rowMouseArea.containsMouse ? Theme.separator : Theme.separatorSoft)
+                    border.width: 1
 
-                    delegate: Rectangle {
-                        id: projItemRow
-                        required property int index
-                        required property var modelData
-                        width: projListView.width
-                        height: 52
-                        radius: 8
-                        readonly property bool isActive: (root.workspace && root.workspace.projectManager)
-                            ? root.workspace.projectManager.currentIndex === projItemRow.index
-                            : false
-                        color: isActive ? Theme.accentSoft : (rowMouseArea.containsMouse ? Theme.surfaceMuted : "transparent")
-                        border.color: isActive ? Theme.accent : (rowMouseArea.containsMouse ? Theme.separatorSoft : "transparent")
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.margins: 8
+                        spacing: 8
 
-                        RowLayout {
-                            anchors.fill: parent
-                            anchors.margins: 8
-                            spacing: 8
+                        Item {
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
 
-                            Item {
-                                Layout.fillWidth: true
-                                Layout.fillHeight: true
-
-                                MouseArea {
-                                    id: rowMouseArea
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        if (root.workspace && root.workspace.projectManager) {
-                                            root.workspace.projectManager.switchProject(projItemRow.index)
-                                            root.close()
-                                        }
-                                    }
-                                }
-
-                                RowLayout {
-                                    anchors.fill: parent
-                                    spacing: 8
-
-                                    Text {
-                                        text: projItemRow.isActive ? "✓" : " "
-                                        color: Theme.accent
-                                        font.bold: true
-                                        font.pixelSize: Theme.fontBody
-                                    }
-
-                                    ColumnLayout {
-                                        Layout.fillWidth: true
-                                        spacing: 2
-
-                                        Text {
-                                            text: projItemRow.modelData ? projItemRow.modelData.name : ""
-                                            color: Theme.text
-                                            font.pixelSize: Theme.fontSecondary
-                                            font.bold: true
-                                            elide: Text.ElideRight
-                                        }
-
-                                        Text {
-                                            text: projItemRow.modelData ? projItemRow.modelData.path : ""
-                                            color: Theme.secondaryText
-                                            font.pixelSize: Theme.fontSecondary
-                                            elide: Text.ElideMiddle
-                                            Layout.fillWidth: true
-                                        }
-                                    }
-                                }
-                            }
-
-                            PrimaryButton {
-                                visible: !projItemRow.isActive
-                                text: "切换"
-                                secondary: true
-                                implicitHeight: 26
+                            MouseArea {
+                                id: rowMouseArea
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
                                 onClicked: {
                                     if (root.workspace && root.workspace.projectManager) {
                                         root.workspace.projectManager.switchProject(projItemRow.index)
@@ -1182,27 +1135,73 @@ AppDialog {
                                 }
                             }
 
-                            IconButton {
-                                glyph: "✕"
-                                toolTip: "从列表中移除此项目"
-                                Layout.preferredWidth: 24
-                                Layout.preferredHeight: 24
-                                onClicked: {
-                                    if (root.workspace && root.workspace.projectManager) {
-                                        root.workspace.projectManager.removeProject(projItemRow.index)
+                            RowLayout {
+                                anchors.fill: parent
+                                spacing: 8
+
+                                Text {
+                                    text: projItemRow.isActive ? "✓" : " "
+                                    color: Theme.accent
+                                    font.bold: true
+                                    font.pixelSize: Theme.fontBody
+                                }
+
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 2
+
+                                    Text {
+                                        text: projItemRow.modelData ? projItemRow.modelData.name : ""
+                                        color: Theme.text
+                                        font.pixelSize: Theme.fontSecondary
+                                        font.bold: true
+                                        elide: Text.ElideRight
+                                    }
+
+                                    Text {
+                                        text: projItemRow.modelData ? projItemRow.modelData.path : ""
+                                        color: Theme.secondaryText
+                                        font.pixelSize: Theme.fontSecondary
+                                        elide: Text.ElideMiddle
+                                        Layout.fillWidth: true
                                     }
                                 }
                             }
                         }
-                    }
 
-                    Text {
-                        anchors.centerIn: parent
-                        visible: projListView.count === 0
-                        text: "暂无保存的项目"
-                        color: Theme.tertiaryText
-                        font.pixelSize: Theme.fontSecondary
+                        PrimaryButton {
+                            visible: !projItemRow.isActive
+                            text: "切换"
+                            secondary: true
+                            implicitHeight: 26
+                            onClicked: {
+                                if (root.workspace && root.workspace.projectManager) {
+                                    root.workspace.projectManager.switchProject(projItemRow.index)
+                                    root.close()
+                                }
+                            }
+                        }
+
+                        IconButton {
+                            glyph: "✕"
+                            toolTip: "从列表中移除此项目"
+                            Layout.preferredWidth: 24
+                            Layout.preferredHeight: 24
+                            onClicked: {
+                                if (root.workspace && root.workspace.projectManager) {
+                                    root.workspace.projectManager.removeProject(projItemRow.index)
+                                }
+                            }
+                        }
                     }
+                }
+
+                Text {
+                    anchors.centerIn: parent
+                    visible: projListView.count === 0
+                    text: "暂无保存的项目"
+                    color: Theme.tertiaryText
+                    font.pixelSize: Theme.fontSecondary
                 }
             }
         }

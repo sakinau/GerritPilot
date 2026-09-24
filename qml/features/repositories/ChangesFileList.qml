@@ -95,7 +95,9 @@ ColumnLayout {
         Layout.fillWidth: true
         Layout.preferredHeight: 32
         radius: 6
-        color: Theme.surfaceMuted
+        color: Theme.surface
+        border.color: Theme.separatorSoft
+        border.width: 1
 
         RowLayout {
             anchors.fill: parent
@@ -379,8 +381,10 @@ ColumnLayout {
             background: Rectangle {
                 y: changeRow.groupStart ? 30 : 0
                 height: 36
-                color: changeRow.selectedFile ? Theme.accentSoft : changeRow.hovered ? Theme.surfaceMuted : "transparent"
                 radius: 6
+                color: changeRow.selectedFile ? Theme.accentSoft : changeRow.hovered ? "#F8F9FA" : "transparent"
+                border.color: changeRow.selectedFile ? Theme.accent : changeRow.hovered ? Theme.separatorSoft : "transparent"
+                border.width: 1
             }
 
             Text {
