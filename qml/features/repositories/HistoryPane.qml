@@ -46,214 +46,274 @@ ColumnLayout {
             }
         }
         ColumnLayout {
-            SplitView.preferredHeight: root.height * 0.48
-            SplitView.minimumHeight: 140
+            SplitView.preferredHeight: Math.min(200, root.height * 0.28)
+            SplitView.minimumHeight: 90
             clip: true
-    ListView {
-        id: historyList
-        Layout.fillWidth: true
-        Layout.fillHeight: true
-        clip: true
-        spacing: 4
-        objectName: "historyList"
-        model: root.filteredEntries
-        ScrollBar.vertical: RightScrollBar { }
-        delegate: ItemDelegate {
-            id: historyDelegate
-            required property var modelData
-            readonly property bool isSelected: root.workspace && root.workspace.selectedRevision === historyDelegate.modelData.revision
-            width: historyList.width
-            height: 56
-            hoverEnabled: true
-            leftPadding: 12
-            rightPadding: 10
-            topPadding: 6
-            bottomPadding: 6
-            onClicked: {
-                const revision = historyDelegate.modelData.revision
-                if (revision.length)
-                    root.revisionRequested(revision)
-            }
-            background: Rectangle {
+            spacing: 4
+
+            // Filter Bar for history
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 28
                 radius: 6
-                color: historyDelegate.isSelected ? Theme.accentSoft : (historyDelegate.hovered ? "#F8F9FA" : "transparent")
-                border.color: historyDelegate.isSelected ? Theme.accent : (historyDelegate.hovered ? Theme.separatorSoft : "transparent")
+                color: Theme.surface
+                border.color: historyFilterInput.activeFocus ? Theme.accent : Theme.separatorSoft
                 border.width: 1
 
-                Rectangle {
-                    visible: historyDelegate.isSelected
-                    anchors.left: parent.left
-                    anchors.top: parent.top
-                    anchors.bottom: parent.bottom
-                    anchors.margins: 4
-                    width: 3
-                    radius: 1.5
-                    color: Theme.accent
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.leftMargin: 8
+                    anchors.rightMargin: 6
+                    spacing: 4
+
+                    Text {
+                        text: "🔍"
+                        font.pixelSize: Theme.fontSecondary
+                        color: Theme.tertiaryText
+                    }
+
+                    TextInput {
+                        id: historyFilterInput
+                        Layout.fillWidth: true
+                        font.pixelSize: Theme.fontSecondary
+                        color: Theme.text
+                        clip: true
+                        selectByMouse: true
+                        text: root.searchFilter
+                        onTextChanged: root.searchFilter = text
+
+                        Text {
+                            anchors.fill: parent
+                            text: "按说明、作者或 SHA 筛选已加载历史..."
+                            color: Theme.placeholder
+                            font.pixelSize: Theme.fontSecondary
+                            visible: !historyFilterInput.text.length && !historyFilterInput.activeFocus
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                    }
+
+                    IconButton {
+                        visible: historyFilterInput.text.length > 0
+                        glyph: "✕"
+                        toolTip: "清除筛选"
+                        implicitWidth: 20
+                        implicitHeight: 20
+                        onClicked: historyFilterInput.text = ""
+                    }
                 }
             }
-            contentItem: ColumnLayout {
-                spacing: 2
-                RowLayout {
-                    Layout.fillWidth: true
-                    Text {
-                        text: historyDelegate.modelData.shortRevision
-                        color: Theme.accent
-                        font.family: Theme.monoFontFamily
-                        font.pixelSize: Theme.fontCaption
-                        font.weight: Font.DemiBold
+
+            ListView {
+                id: historyList
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                clip: true
+                spacing: 3
+                objectName: "historyList"
+                model: root.filteredEntries
+                ScrollBar.vertical: RightScrollBar { }
+                delegate: ItemDelegate {
+                    id: historyDelegate
+                    required property var modelData
+                    readonly property bool isSelected: root.workspace && root.workspace.selectedRevision === historyDelegate.modelData.revision
+                    width: historyList.width
+                    height: 48
+                    hoverEnabled: true
+                    leftPadding: 10
+                    rightPadding: 8
+                    topPadding: 4
+                    bottomPadding: 4
+                    onClicked: {
+                        const revision = historyDelegate.modelData.revision
+                        if (revision.length)
+                            root.revisionRequested(revision)
                     }
-                    Text {
-                        text: historyDelegate.modelData.author
-                        color: Theme.secondaryText
-                        font.pixelSize: Theme.fontCaption
-                        elide: Text.ElideRight
-                        Layout.fillWidth: true
-                    }
-                    Text {
-                        text: historyDelegate.modelData.date.slice(0, 10)
-                        color: Theme.tertiaryText
-                        font.pixelSize: Theme.fontCaption
-                    }
-                    PrimaryButton {
-                        id: checkoutButton
-                        text: "检出"
-                        secondary: true
-                        implicitHeight: 26
-                        implicitWidth: 56
-                        enabled: !root.workspace.busy
-                        onClicked: {
-                            root.revisionCheckoutRequested(historyDelegate.modelData.revision)
+                    background: Rectangle {
+                        radius: 6
+                        color: historyDelegate.isSelected ? Theme.accentSoft : (historyDelegate.hovered ? "#F8F9FA" : "transparent")
+                        border.color: historyDelegate.isSelected ? Theme.accent : (historyDelegate.hovered ? Theme.separatorSoft : "transparent")
+                        border.width: 1
+
+                        Rectangle {
+                            visible: historyDelegate.isSelected
+                            anchors.left: parent.left
+                            anchors.top: parent.top
+                            anchors.bottom: parent.bottom
+                            anchors.margins: 3
+                            width: 3
+                            radius: 1.5
+                            color: Theme.accent
                         }
                     }
-                    PrimaryButton {
-                        id: cherryPickButton
-                        text: "摘取"
-                        secondary: true
-                        toolTip: "将此提交摘取到当前分支"
-                        implicitHeight: 26
-                        implicitWidth: 56
-                        enabled: !root.workspace.busy
-                        onClicked: {
-                            root.cherryPickRequested(historyDelegate.modelData.revision)
+                    contentItem: ColumnLayout {
+                        spacing: 2
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 6
+                            Text {
+                                text: historyDelegate.modelData.shortRevision
+                                color: Theme.accent
+                                font.family: Theme.monoFontFamily
+                                font.pixelSize: Theme.fontCaption
+                                font.weight: Font.DemiBold
+                            }
+                            Text {
+                                text: historyDelegate.modelData.author
+                                color: Theme.secondaryText
+                                font.pixelSize: Theme.fontCaption
+                                elide: Text.ElideRight
+                                Layout.fillWidth: true
+                            }
+                            Text {
+                                text: historyDelegate.modelData.date.slice(0, 10)
+                                color: Theme.tertiaryText
+                                font.pixelSize: Theme.fontCaption
+                            }
+                            PrimaryButton {
+                                id: checkoutButton
+                                text: "检出"
+                                secondary: true
+                                implicitHeight: 22
+                                implicitWidth: 48
+                                enabled: !root.workspace.busy
+                                onClicked: {
+                                    root.revisionCheckoutRequested(historyDelegate.modelData.revision)
+                                }
+                            }
+                            PrimaryButton {
+                                id: cherryPickButton
+                                text: "摘取"
+                                secondary: true
+                                toolTip: "将此提交摘取到当前分支"
+                                implicitHeight: 22
+                                implicitWidth: 48
+                                enabled: !root.workspace.busy
+                                onClicked: {
+                                    root.cherryPickRequested(historyDelegate.modelData.revision)
+                                }
+                            }
+                            PrimaryButton {
+                                text: "撤销"
+                                secondary: true
+                                toolTip: "新增反向提交，不删除原提交"
+                                implicitHeight: 22
+                                implicitWidth: 48
+                                enabled: !root.workspace.busy
+                                onClicked: root.revertRequested(historyDelegate.modelData.revision)
+                            }
                         }
-                    }
-                    PrimaryButton {
-                        text: "撤销"
-                        secondary: true
-                        toolTip: "新增反向提交，不删除原提交"
-                        implicitHeight: 26
-                        implicitWidth: 56
-                        enabled: !root.workspace.busy
-                        onClicked: root.revertRequested(historyDelegate.modelData.revision)
+                        Text {
+                            objectName: "historySubject"
+                            text: historyDelegate.modelData.subject
+                            color: Theme.text
+                            font.pixelSize: Theme.fontCaption
+                            elide: Text.ElideRight
+                            Layout.fillWidth: true
+                        }
                     }
                 }
                 Text {
-                    objectName: "historySubject"
-                    text: historyDelegate.modelData.subject
-                    color: Theme.text
-                    font.pixelSize: Theme.fontBody
-                    elide: Text.ElideRight
-                    Layout.fillWidth: true
+                    anchors.centerIn: parent
+                    visible: historyList.count === 0
+                    text: root.searchFilter.length ? "未找到匹配的提交（当前仅检索已加载记录）" : "暂无提交历史"
+                    color: Theme.tertiaryText
+                    font.pixelSize: Theme.fontSecondary
                 }
             }
-        }
-        Text {
-            anchors.centerIn: parent
-            visible: historyList.count === 0
-            text: root.searchFilter.length ? "未找到匹配的提交（当前仅检索已加载记录）" : "暂无提交历史"
-            color: Theme.tertiaryText
-            font.pixelSize: Theme.fontSecondary
-        }
-    }
 
-    RowLayout {
-        Layout.fillWidth: true
-        Text {
-            Layout.fillWidth: true
-            text: root.searchFilter.trim().length > 0
-                ? ("匹配 " + root.filteredEntries.length + " / 已加载 " + (root.workspace ? root.workspace.historyEntries.length : 0) + " 条（当前仅筛选已加载记录）")
-                : ("已加载 " + (root.workspace ? root.workspace.historyEntries.length : 0) + " 条提交")
-            color: Theme.tertiaryText
-            font.pixelSize: Theme.fontSecondary
-        }
-        PrimaryButton {
-            objectName: "loadMoreHistoryButton"
-            text: "加载更多"
-            secondary: true
-            visible: root.workspace ? root.workspace.historyHasMore : false
-            enabled: root.workspace ? !root.workspace.busy : false
-            onClicked: root.workspace.loadMoreHistory()
-        }
-    }
-
+            RowLayout {
+                Layout.fillWidth: true
+                Text {
+                    Layout.fillWidth: true
+                    text: root.searchFilter.trim().length > 0
+                        ? ("匹配 " + root.filteredEntries.length + " / 已加载 " + (root.workspace ? root.workspace.historyEntries.length : 0) + " 条")
+                        : ("已加载 " + (root.workspace ? root.workspace.historyEntries.length : 0) + " 条提交")
+                    color: Theme.tertiaryText
+                    font.pixelSize: Theme.fontCaption
+                }
+                PrimaryButton {
+                    objectName: "loadMoreHistoryButton"
+                    text: "加载更多"
+                    secondary: true
+                    implicitHeight: 22
+                    implicitWidth: 64
+                    visible: root.workspace ? root.workspace.historyHasMore : false
+                    enabled: root.workspace ? !root.workspace.busy : false
+                    onClicked: root.workspace.loadMoreHistory()
+                }
+            }
         }
         ColumnLayout {
             SplitView.fillHeight: true
             SplitView.minimumHeight: 180
             clip: true
-    RowLayout {
-        Layout.fillWidth: true
-        Text {
-            Layout.fillWidth: true
-            text: root.workspace && root.workspace.selectedRevision.length
-                ? "提交 " + root.workspace.selectedRevision
-                : "选择提交查看差异"
-            color: Theme.secondaryText
-        }
-        FileActionButton {
-            text: "⇄"
-            toolTip: root.sideBySideDiff ? "切换到统一 Diff" : "切换到左右 Diff"
-            onClicked: root.sideBySideDiff = !root.sideBySideDiff
-        }
-    }
+            spacing: 4
 
-    SplitView {
-        Layout.fillWidth: true
-        Layout.fillHeight: true
-        orientation: Qt.Horizontal
-        handle: Rectangle {
-            implicitWidth: 6
-            color: "transparent"
-            Rectangle {
-                anchors.centerIn: parent
-                width: (SplitHandle.pressed || SplitHandle.hovered) ? 2 : 1
-                height: parent.height
-                color: (SplitHandle.pressed || SplitHandle.hovered) ? Theme.accent : Theme.separatorSoft
-            }
-        }
-        ListView {
-            id: files
-            SplitView.preferredWidth: 260
-            SplitView.minimumWidth: 120
-            clip: true
-            model: root.workspace ? root.workspace.revisionFiles : []
-            ScrollBar.vertical: RightScrollBar { }
-            delegate: ItemDelegate {
-                id: fileRow
-                required property string modelData
-                width: files.width
-                height: 34
-                text: modelData
-                highlighted: modelData === (root.workspace ? root.workspace.revisionFile : "")
-                onClicked: root.workspace.showRevisionFileDiff(modelData)
-                contentItem: Text {
-                    text: fileRow.text
-                    color: Theme.text
+            RowLayout {
+                Layout.fillWidth: true
+                Text {
+                    Layout.fillWidth: true
+                    text: root.workspace && root.workspace.selectedRevision.length
+                        ? "提交 " + root.workspace.selectedRevision
+                        : "选择提交查看差异"
+                    color: Theme.secondaryText
                     font.pixelSize: Theme.fontSecondary
-                    elide: Text.ElideMiddle
-                    verticalAlignment: Text.AlignVCenter
+                    font.weight: Font.Medium
+                }
+                FileActionButton {
+                    text: "⇄"
+                    toolTip: root.sideBySideDiff ? "切换到统一 Diff" : "切换到左右 Diff"
+                    onClicked: root.sideBySideDiff = !root.sideBySideDiff
                 }
             }
-        }
-        DiffView {
-            SplitView.fillWidth: true
-            SplitView.minimumWidth: 200
-            diffText: root.workspace ? root.workspace.revisionDiff : ""
-            renderingEnabled: root.active
-            sideBySide: root.sideBySideDiff
-            workspace: root.workspace
-        }
-    }
+
+            SplitView {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                orientation: Qt.Horizontal
+                handle: Rectangle {
+                    implicitWidth: 6
+                    color: "transparent"
+                    Rectangle {
+                        anchors.centerIn: parent
+                        width: (SplitHandle.pressed || SplitHandle.hovered) ? 2 : 1
+                        height: parent.height
+                        color: (SplitHandle.pressed || SplitHandle.hovered) ? Theme.accent : Theme.separatorSoft
+                    }
+                }
+                ListView {
+                    id: files
+                    SplitView.preferredWidth: 240
+                    SplitView.minimumWidth: 120
+                    clip: true
+                    model: root.workspace ? root.workspace.revisionFiles : []
+                    ScrollBar.vertical: RightScrollBar { }
+                    delegate: ItemDelegate {
+                        id: fileRow
+                        required property string modelData
+                        width: files.width
+                        height: 30
+                        text: modelData
+                        highlighted: modelData === (root.workspace ? root.workspace.revisionFile : "")
+                        onClicked: root.workspace.showRevisionFileDiff(modelData)
+                        contentItem: Text {
+                            text: fileRow.text
+                            color: Theme.text
+                            font.pixelSize: Theme.fontSecondary
+                            elide: Text.ElideMiddle
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                    }
+                }
+                DiffView {
+                    SplitView.fillWidth: true
+                    SplitView.minimumWidth: 200
+                    diffText: root.workspace ? root.workspace.revisionDiff : ""
+                    renderingEnabled: root.active
+                    sideBySide: root.sideBySideDiff
+                    workspace: root.workspace
+                }
+            }
         }
     }
 }

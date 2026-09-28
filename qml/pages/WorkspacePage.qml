@@ -61,11 +61,11 @@ Item {
 
             ColumnLayout {
                 anchors.fill: parent
-                anchors.leftMargin: 12
-                anchors.rightMargin: 12
-                anchors.topMargin: 12
-                anchors.bottomMargin: 12
-                spacing: 15
+                anchors.leftMargin: 8
+                anchors.rightMargin: 8
+                anchors.topMargin: 8
+                anchors.bottomMargin: 8
+                spacing: 8
 
                 RepositoryDetailPane {
                     Layout.fillWidth: true

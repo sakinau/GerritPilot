@@ -78,182 +78,108 @@ GlassCard {
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: Theme.panePadding
-        spacing: 10
+        anchors.margins: 8
+        spacing: 8
 
+        // Unified Single Top Header Bar (Repo Info + Segmented Tabs + Action Buttons)
         RowLayout {
             Layout.fillWidth: true
-            spacing: 10
-            Rectangle {
-                Layout.preferredWidth: 40
-                Layout.preferredHeight: 40
-                radius: 12
-                color: Theme.accentSoft
-                Text {
-                    anchors.centerIn: parent
-                    text: "⌘"
-                    color: Theme.accent
-                    font.pixelSize: 19
-                    font.weight: Font.DemiBold
+            Layout.preferredHeight: 32
+            spacing: 8
+
+            // Left Section: Repo Badge + Name + Branch Pill
+            RowLayout {
+                spacing: 8
+                Layout.alignment: Qt.AlignVCenter
+
+                Rectangle {
+                    implicitWidth: 28
+                    implicitHeight: 28
+                    radius: 7
+                    color: Theme.accentSoft
+                    Text {
+                        anchors.centerIn: parent
+                        text: "⌘"
+                        color: Theme.accent
+                        font.pixelSize: 15
+                        font.weight: Font.DemiBold
+                    }
                 }
-            }
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: 1
+
                 Text {
                     id: repositoryName
                     objectName: "repositoryName"
-                    text: root.workspace.selectedName.length ? root.workspace.selectedName : "未选择仓库"
-                    Layout.fillWidth: true
+                    text: root.workspace && root.workspace.selectedName.length ? root.workspace.selectedName : "未选择仓库"
                     color: Theme.text
-                    font.pixelSize: Theme.fontTitle
+                    font.pixelSize: 14
                     font.weight: Font.DemiBold
                     elide: Text.ElideRight
+                    Layout.maximumWidth: 220
                     HoverHandler { id: repositoryNameHover }
-                    ToolTip.visible: repositoryNameHover.hovered && root.workspace.selectedPath.length > 0
-                    ToolTip.text: root.workspace.workspacePath + "/" + root.workspace.selectedPath
+                    ToolTip.visible: repositoryNameHover.hovered && root.workspace && root.workspace.selectedPath.length > 0
+                    ToolTip.text: root.workspace ? (root.workspace.workspacePath + "/" + root.workspace.selectedPath) : ""
                     ToolTip.delay: 500
                 }
-                RowLayout {
-                    Layout.fillWidth: true
-                    visible: root.workspace.selectedPath.length > 0
-                    Rectangle {
-                        objectName: "headerBranchButton"
-                        color: branchMouse.containsMouse ? Theme.accentSoft : "#F0F4FA"
-                        border.color: branchMouse.containsMouse ? Theme.accent : Theme.separatorSoft
-                        border.width: 1
-                        radius: 6
-                        implicitWidth: branchRow.implicitWidth + 14
-                        implicitHeight: 24
-                        RowLayout {
-                            id: branchRow
-                            anchors.centerIn: parent
-                            spacing: 4
-                            Text {
-                                text: "⎇ " + root.workspace.selectedBranch
-                                color: Theme.accent
-                                font.pixelSize: Theme.fontSecondary
-                                font.weight: Font.DemiBold
-                                elide: Text.ElideRight
-                                Layout.maximumWidth: 280
-                            }
-                            Text {
-                                text: "▾"
-                                color: Theme.accent
-                                font.pixelSize: Theme.fontSecondary
-                            }
+
+                Rectangle {
+                    objectName: "headerBranchButton"
+                    visible: root.workspace && root.workspace.selectedPath.length > 0
+                    color: branchMouse.containsMouse ? Theme.accentSoft : "#F0F4FA"
+                    border.color: branchMouse.containsMouse ? Theme.accent : Theme.separatorSoft
+                    border.width: 1
+                    radius: 6
+                    implicitWidth: branchRow.implicitWidth + 12
+                    implicitHeight: 24
+                    Layout.alignment: Qt.AlignVCenter
+
+                    RowLayout {
+                        id: branchRow
+                        anchors.centerIn: parent
+                        spacing: 4
+                        Text {
+                            text: "⎇ " + (root.workspace ? root.workspace.selectedBranch : "")
+                            color: Theme.accent
+                            font.pixelSize: Theme.fontCaption
+                            font.weight: Font.DemiBold
+                            elide: Text.ElideRight
+                            Layout.maximumWidth: 160
                         }
-                        MouseArea {
-                            id: branchMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            ToolTip.visible: containsMouse
-                            ToolTip.text: "本地分支管理（切换 / 新建 / 删除）"
-                            onClicked: root.branchRequested()
+                        Text {
+                            text: "▾"
+                            color: Theme.accent
+                            font.pixelSize: Theme.fontCaption
                         }
                     }
+                    MouseArea {
+                        id: branchMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        ToolTip.visible: containsMouse
+                        ToolTip.text: "本地分支管理（切换 / 新建 / 删除）"
+                        onClicked: root.branchRequested()
+                    }
                 }
+
                 Text {
-                    visible: root.workspace.selectedPath.length === 0
+                    visible: !root.workspace || root.workspace.selectedPath.length === 0
                     text: "从左侧选择一个仓库"
                     color: Theme.secondaryText
                     font.pixelSize: Theme.fontSecondary
                 }
             }
-            PrimaryButton {
-                id: headerPushBtn
-                objectName: "headerPushBtn"
-                glyph: "↑"
-                text: "推送"
-                toolTip: "推送当前仓库到 Gerrit 评审 (Ctrl+Enter)"
-                implicitHeight: 32
-                implicitWidth: 76
-                enabled: root.workspace && !root.workspace.busy && root.workspace.selectedPath.length > 0
-                onClicked: root.pushRequested()
-            }
-            IconButton {
-                glyph: "↻"
-                toolTip: "刷新当前仓库状态"
-                implicitHeight: 32
-                implicitWidth: 32
-                enabled: root.workspace && !root.workspace.busy
-                onClicked: root.workspace.refreshActive()
-            }
-            IconButton {
-                glyph: "⌘"
-                toolTip: "命令日志"
-                implicitHeight: 32
-                implicitWidth: 32
-                onClicked: root.openCommandPanel()
-            }
-            IconButton {
-                glyph: "⚙"
-                toolTip: "设置"
-                implicitHeight: 32
-                implicitWidth: 32
-                onClicked: root.settingsRequested()
-            }
-            IconButton {
-                visible: !root.compactActions
-                glyph: "▣"
-                toolTip: "贮藏管理"
-                implicitHeight: 32
-                implicitWidth: 32
-                enabled: !root.workspace.busy && root.workspace.selectedPath.length > 0
-                onClicked: {
-                    root.workspace.loadStashList()
-                    stashDialog.open()
-                }
-            }
-            IconButton {
-                visible: !root.compactActions
-                glyph: root.workspace.selectedIgnored ? "⊕" : "⊖"
-                toolTip: root.workspace.selectedIgnored ? "恢复仓库显示" : "隐藏当前仓库（可在设置中恢复）"
-                implicitHeight: 32
-                implicitWidth: 32
-                enabled: root.workspace.selectedPath.length > 0
-                onClicked: root.workspace.setActiveRepositoryIgnored(!root.workspace.selectedIgnored)
-            }
-            IconButton {
-                visible: root.compactActions
-                glyph: "⋯"
-                toolTip: "仓库选项"
-                implicitHeight: 32
-                implicitWidth: 32
-                onClicked: repositoryMenu.open()
-                Menu {
-                    id: repositoryMenu
-                    y: parent.height
-                    MenuItem {
-                        text: "贮藏管理…"
-                        onTriggered: {
-                            if (root.workspace) root.workspace.loadStashList()
-                            stashDialog.open()
-                        }
-                    }
-                    MenuItem {
-                        text: root.workspace.selectedIgnored ? "恢复显示此仓库" : "隐藏此仓库"
-                        onTriggered: root.workspace.setActiveRepositoryIgnored(!root.workspace.selectedIgnored)
-                    }
-                }
-            }
-        }
 
-        // Consolidated Secondary Toolbar (Segmented Tabs + Contextual Actions)
-        RowLayout {
-            Layout.fillWidth: true
-            Layout.preferredHeight: 32
-            spacing: 10
+            Item { Layout.fillWidth: true }
 
-            // Compact Segmented Control
+            // Center: Compact Segmented Tab Switcher [工作区改动 | 提交历史]
             Rectangle {
-                Layout.preferredWidth: 220
-                Layout.fillHeight: true
+                implicitWidth: 190
+                implicitHeight: 28
                 radius: 7
                 color: "#EEF0F4"
                 border.color: Theme.separatorSoft
                 border.width: 1
+                Layout.alignment: Qt.AlignVCenter
 
                 RowLayout {
                     anchors.fill: parent
@@ -281,7 +207,7 @@ GlassCard {
                             contentItem: Text {
                                 text: tabButton.text
                                 color: root.currentTab === tabButton.index ? Theme.text : Theme.secondaryText
-                                font.pixelSize: Theme.fontBody
+                                font.pixelSize: Theme.fontSecondary
                                 font.weight: root.currentTab === tabButton.index ? Font.DemiBold : Font.Medium
                                 horizontalAlignment: Text.AlignHCenter
                                 verticalAlignment: Text.AlignVCenter
@@ -291,189 +217,87 @@ GlassCard {
                 }
             }
 
-            // Tab 0 Contextual Controls: Diff Toolbar
-            RowLayout {
-                visible: root.currentTab === 0
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                spacing: 8
+            Item { Layout.fillWidth: true }
 
-                Text {
-                    text: root.workspace.selectedFile.length
-                        ? root.workspace.selectedFile + (root.workspace.selectedFileStaged ? " · 已暂存" : " · 工作区")
-                        : "代码差异"
-                    elide: Text.ElideMiddle
-                    color: Theme.secondaryText
-                    font.pixelSize: Theme.fontSecondary
-                    Layout.fillWidth: true
-                }
-                Button {
-                    id: workingTreeButton
-                    text: "工作区改动"
-                    implicitWidth: 80
+            // Right: Push + Action Buttons
+            RowLayout {
+                spacing: 6
+                Layout.alignment: Qt.AlignVCenter
+
+                PrimaryButton {
+                    id: headerPushBtn
+                    objectName: "headerPushBtn"
+                    glyph: "↑"
+                    text: "推送"
+                    toolTip: "推送当前仓库到 Gerrit 评审 (Ctrl+Enter)"
                     implicitHeight: 28
-                    padding: 0
-                    hoverEnabled: true
-                    onClicked: root.workingTreeRequested()
-                    background: Rectangle {
-                        radius: 6
-                        color: workingTreeButton.down ? "#DCEBFA" : workingTreeButton.hovered ? Theme.accentSoft : "transparent"
-                        border.color: workingTreeButton.hovered ? Theme.accent : "transparent"
-                        border.width: 1
-                    }
-                    contentItem: Text {
-                        text: workingTreeButton.text
-                        color: Theme.accent
-                        font.pixelSize: Theme.fontCaption
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                    }
+                    implicitWidth: 68
+                    enabled: root.workspace && !root.workspace.busy && root.workspace.selectedPath.length > 0
+                    onClicked: root.pushRequested()
                 }
-                Text {
-                    objectName: "staleStatusLabel"
-                    visible: root.workspace.detailsCached
-                    text: "状态未验证"
-                    color: Theme.orange
-                    font.pixelSize: Theme.fontCaption
-                }
-                FileActionButton {
-                    objectName: "refreshRepositoryButton"
-                    text: "↻"
-                    toolTip: "刷新当前仓库"
-                    enabled: !root.workspace.busy && root.workspace.selectedPath.length > 0
+                IconButton {
+                    glyph: "↻"
+                    toolTip: "刷新当前仓库状态"
+                    implicitHeight: 28
+                    implicitWidth: 28
+                    enabled: root.workspace && !root.workspace.busy
                     onClicked: root.workspace.refreshActive()
                 }
-                Rectangle { Layout.preferredWidth: 1; Layout.preferredHeight: 16; color: Theme.separatorSoft }
-                ToolButton {
-                    id: unifiedButton
-                    text: "统一"
-                    implicitWidth: 46
+                IconButton {
+                    glyph: "⌘"
+                    toolTip: "命令日志"
                     implicitHeight: 28
-                    padding: 0
-                    hoverEnabled: true
-                    checkable: true
-                    checked: !root.sideBySideDiff
-                    onClicked: root.sideBySideDiff = false
-                    background: Rectangle {
-                        radius: 6
-                        color: unifiedButton.checked ? Theme.accentSoft : (unifiedButton.hovered ? "#F8F9FA" : "transparent")
-                        border.color: unifiedButton.checked ? Theme.accent : "transparent"
-                        border.width: 1
-                    }
-                    contentItem: Text {
-                        text: unifiedButton.text
-                        color: unifiedButton.checked ? Theme.accent : Theme.secondaryText
-                        font.pixelSize: Theme.fontCaption
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                    }
+                    implicitWidth: 28
+                    onClicked: root.openCommandPanel()
                 }
-                ToolButton {
-                    id: splitButton
-                    text: "左右对比"
-                    implicitWidth: 68
+                IconButton {
+                    glyph: "⚙"
+                    toolTip: "设置"
                     implicitHeight: 28
-                    padding: 0
-                    hoverEnabled: true
-                    checkable: true
-                    checked: root.sideBySideDiff
-                    onClicked: root.sideBySideDiff = true
-                    background: Rectangle {
-                        radius: 6
-                        color: splitButton.checked ? Theme.accentSoft : (splitButton.hovered ? "#F8F9FA" : "transparent")
-                        border.color: splitButton.checked ? Theme.accent : "transparent"
-                        border.width: 1
-                    }
-                    contentItem: Text {
-                        text: splitButton.text
-                        color: splitButton.checked ? Theme.accent : Theme.secondaryText
-                        font.pixelSize: Theme.fontCaption
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                    }
+                    implicitWidth: 28
+                    onClicked: root.settingsRequested()
                 }
-                ToolButton {
-                    id: whitespaceButton
-                    text: "忽略空白"
-                    implicitWidth: 68
+                IconButton {
+                    visible: !root.compactActions
+                    glyph: "▣"
+                    toolTip: "贮藏管理"
                     implicitHeight: 28
-                    padding: 0
-                    hoverEnabled: true
-                    checkable: true
-                    checked: root.workspace ? Boolean(root.workspace.ignoreWhitespace) : false
+                    implicitWidth: 28
+                    enabled: root.workspace && !root.workspace.busy && root.workspace.selectedPath.length > 0
                     onClicked: {
-                        if (root.workspace)
-                            root.workspace.ignoreWhitespace = !root.workspace.ignoreWhitespace
-                    }
-                    background: Rectangle {
-                        radius: 6
-                        color: whitespaceButton.checked ? Theme.accentSoft : (whitespaceButton.hovered ? "#F8F9FA" : "transparent")
-                        border.color: whitespaceButton.checked ? Theme.accent : "transparent"
-                        border.width: 1
-                    }
-                    contentItem: Text {
-                        text: whitespaceButton.text
-                        color: whitespaceButton.checked ? Theme.accent : Theme.secondaryText
-                        font.pixelSize: Theme.fontCaption
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
+                        root.workspace.loadStashList()
+                        stashDialog.open()
                     }
                 }
-            }
-
-            // Tab 1 Contextual Controls: History Search Filter
-            RowLayout {
-                visible: root.currentTab === 1
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                spacing: 8
-
-                Rectangle {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 30
-                    radius: 6
-                    color: Theme.surface
-                    border.color: historyFilterInput.activeFocus ? Theme.accent : Theme.separatorSoft
-                    border.width: 1
-
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: 8
-                        anchors.rightMargin: 6
-                        spacing: 4
-
-                        Text {
-                            text: "🔍"
-                            font.pixelSize: Theme.fontSecondary
-                            color: Theme.tertiaryText
-                        }
-
-                        TextInput {
-                            id: historyFilterInput
-                            Layout.fillWidth: true
-                            font.pixelSize: Theme.fontSecondary
-                            color: Theme.text
-                            clip: true
-                            selectByMouse: true
-                            onTextChanged: historyPane.searchFilter = text
-
-                            Text {
-                                anchors.fill: parent
-                                text: "按说明、作者或 SHA 筛选已加载历史..."
-                                color: Theme.placeholder
-                                font.pixelSize: Theme.fontSecondary
-                                visible: !historyFilterInput.text.length && !historyFilterInput.activeFocus
-                                verticalAlignment: Text.AlignVCenter
+                IconButton {
+                    visible: !root.compactActions
+                    glyph: root.workspace && root.workspace.selectedIgnored ? "⊕" : "⊖"
+                    toolTip: root.workspace && root.workspace.selectedIgnored ? "恢复仓库显示" : "隐藏当前仓库（可在设置中恢复）"
+                    implicitHeight: 28
+                    implicitWidth: 28
+                    enabled: root.workspace && root.workspace.selectedPath.length > 0
+                    onClicked: root.workspace.setActiveRepositoryIgnored(!root.workspace.selectedIgnored)
+                }
+                IconButton {
+                    visible: root.compactActions
+                    glyph: "⋯"
+                    toolTip: "仓库选项"
+                    implicitHeight: 28
+                    implicitWidth: 28
+                    onClicked: repositoryMenu.open()
+                    Menu {
+                        id: repositoryMenu
+                        y: parent.height
+                        MenuItem {
+                            text: "贮藏管理…"
+                            onTriggered: {
+                                if (root.workspace) root.workspace.loadStashList()
+                                stashDialog.open()
                             }
                         }
-
-                        IconButton {
-                            visible: historyFilterInput.text.length > 0
-                            glyph: "✕"
-                            toolTip: "清除筛选"
-                            implicitWidth: 20
-                            implicitHeight: 20
-                            onClicked: historyFilterInput.text = ""
+                        MenuItem {
+                            text: root.workspace && root.workspace.selectedIgnored ? "恢复显示此仓库" : "隐藏此仓库"
+                            onTriggered: root.workspace.setActiveRepositoryIgnored(!root.workspace.selectedIgnored)
                         }
                     }
                 }
@@ -605,25 +429,174 @@ GlassCard {
                     }
                         CommitEditor {
                             objectName: "commitEditorPane"
-                            SplitView.preferredHeight: Math.max(250, implicitHeight)
-                            SplitView.minimumHeight: implicitHeight
+                            SplitView.preferredHeight: Math.max(180, Math.min(220, implicitHeight))
+                            SplitView.minimumHeight: 120
                             workspace: root.workspace
                             onCommitRequested: (message, amend, stageAll) => root.commitRequested(message, amend, stageAll)
                         }
                     }
                 }
-                DiffView {
-                    objectName: "changesDiffPane"
+                ColumnLayout {
                     SplitView.fillWidth: true
                     SplitView.minimumWidth: 240
+                    spacing: 0
                     clip: true
-                    diffText: root.workspace ? root.workspace.diffText : ""
-                    renderingEnabled: root.currentTab === 0
-                    sideBySide: root.sideBySideDiff
-                    workspace: root.workspace
+
+                    // Contextual Diff Toolbar
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 30
+                        color: "#FAFBFD"
+                        border.color: Theme.separatorSoft
+                        border.width: 1
+
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: 8
+                            anchors.rightMargin: 8
+                            spacing: 6
+
+                            Text {
+                                text: root.workspace && root.workspace.selectedFile.length
+                                    ? root.workspace.selectedFile + (root.workspace.selectedFileStaged ? " · 已暂存" : " · 工作区")
+                                    : "代码差异"
+                                elide: Text.ElideMiddle
+                                color: Theme.secondaryText
+                                font.pixelSize: Theme.fontSecondary
+                                font.weight: Font.Medium
+                                Layout.fillWidth: true
+                            }
+                            Button {
+                                id: workingTreeButton
+                                text: "工作区改动"
+                                implicitWidth: 76
+                                implicitHeight: 22
+                                padding: 0
+                                hoverEnabled: true
+                                onClicked: root.workingTreeRequested()
+                                background: Rectangle {
+                                    radius: 5
+                                    color: workingTreeButton.down ? "#DCEBFA" : workingTreeButton.hovered ? Theme.accentSoft : "transparent"
+                                    border.color: workingTreeButton.hovered ? Theme.accent : "transparent"
+                                    border.width: 1
+                                }
+                                contentItem: Text {
+                                    text: workingTreeButton.text
+                                    color: Theme.accent
+                                    font.pixelSize: Theme.fontCaption
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+                            }
+                            Text {
+                                objectName: "staleStatusLabel"
+                                visible: root.workspace ? Boolean(root.workspace.detailsCached) : false
+                                text: "状态未验证"
+                                color: Theme.orange
+                                font.pixelSize: Theme.fontCaption
+                            }
+                            FileActionButton {
+                                objectName: "refreshRepositoryButton"
+                                text: "↻"
+                                toolTip: "刷新当前仓库"
+                                enabled: root.workspace && !root.workspace.busy && root.workspace.selectedPath.length > 0
+                                onClicked: root.workspace.refreshActive()
+                            }
+                            Rectangle { Layout.preferredWidth: 1; Layout.preferredHeight: 14; color: Theme.separatorSoft }
+                            ToolButton {
+                                id: unifiedButton
+                                text: "统一"
+                                implicitWidth: 44
+                                implicitHeight: 22
+                                padding: 0
+                                hoverEnabled: true
+                                checkable: true
+                                checked: !root.sideBySideDiff
+                                onClicked: root.sideBySideDiff = false
+                                background: Rectangle {
+                                    radius: 5
+                                    color: unifiedButton.checked ? Theme.accentSoft : (unifiedButton.hovered ? "#F8F9FA" : "transparent")
+                                    border.color: unifiedButton.checked ? Theme.accent : "transparent"
+                                    border.width: 1
+                                }
+                                contentItem: Text {
+                                    text: unifiedButton.text
+                                    color: unifiedButton.checked ? Theme.accent : Theme.secondaryText
+                                    font.pixelSize: Theme.fontCaption
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+                            }
+                            ToolButton {
+                                id: splitButton
+                                text: "左右对比"
+                                implicitWidth: 64
+                                implicitHeight: 22
+                                padding: 0
+                                hoverEnabled: true
+                                checkable: true
+                                checked: root.sideBySideDiff
+                                onClicked: root.sideBySideDiff = true
+                                background: Rectangle {
+                                    radius: 5
+                                    color: splitButton.checked ? Theme.accentSoft : (splitButton.hovered ? "#F8F9FA" : "transparent")
+                                    border.color: splitButton.checked ? Theme.accent : "transparent"
+                                    border.width: 1
+                                }
+                                contentItem: Text {
+                                    text: splitButton.text
+                                    color: splitButton.checked ? Theme.accent : Theme.secondaryText
+                                    font.pixelSize: Theme.fontCaption
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+                            }
+                            ToolButton {
+                                id: whitespaceButton
+                                text: "忽略空白"
+                                implicitWidth: 64
+                                implicitHeight: 22
+                                padding: 0
+                                hoverEnabled: true
+                                checkable: true
+                                checked: root.workspace ? Boolean(root.workspace.ignoreWhitespace) : false
+                                onClicked: {
+                                    if (root.workspace)
+                                        root.workspace.ignoreWhitespace = !root.workspace.ignoreWhitespace
+                                }
+                                background: Rectangle {
+                                    radius: 5
+                                    color: whitespaceButton.checked ? Theme.accentSoft : (whitespaceButton.hovered ? "#F8F9FA" : "transparent")
+                                    border.color: whitespaceButton.checked ? Theme.accent : "transparent"
+                                    border.width: 1
+                                }
+                                contentItem: Text {
+                                    text: whitespaceButton.text
+                                    color: whitespaceButton.checked ? Theme.accent : Theme.secondaryText
+                                    font.pixelSize: Theme.fontCaption
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+                            }
+                        }
+                    }
+
+                    DiffView {
+                        id: changesDiffPane
+                        objectName: "changesDiffPane"
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        clip: true
+                        diffText: root.workspace ? root.workspace.diffText : ""
+                        renderingEnabled: root.currentTab === 0
+                        sideBySide: root.sideBySideDiff
+                        workspace: root.workspace
+                    }
                 }
             }
             HistoryPane {
+                id: historyPane
+                objectName: "historyPane"
                 workspace: root.workspace
                 active: root.currentTab === 1
                 onRevisionRequested: revision => root.revisionRequested(revision)
