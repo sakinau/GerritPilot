@@ -45,16 +45,19 @@ public:
     Q_INVOKABLE void generate(const QString &repoName, const QString &branchName,
                               const QString &diffText, const QStringList &changedFiles,
                               const QString &existingMessage, const QString &commitType,
-                              const QString &issueId, bool wholeRepository);
+                              const QString &issueId, bool wholeRepository,
+                              bool manualCompiled = false, const QString &compileNote = QString());
     Q_INVOKABLE void cancel();
     Q_INVOKABLE void testConnection();
 
     // Verification and validation of candidate commit message
     static QString validateAndNormalize(const QString &rawCandidate,
-                                                     const QString &repoName,
-                                                     const QString &existingMessage,
-                                                     const QString &commitType,
-                                                     const QString &issueId);
+                                        const QString &repoName,
+                                        const QString &existingMessage,
+                                        const QString &commitType,
+                                        const QString &issueId,
+                                        bool manualCompiled = false,
+                                        const QString &compileNote = QString());
 
 signals:
     void busyChanged(bool busy);
@@ -91,4 +94,6 @@ private:
     QString m_pendingExistingMsg;
     QString m_pendingCommitType;
     QString m_pendingIssueId;
+    bool m_pendingManualCompiled = false;
+    QString m_pendingCompileNote;
 };

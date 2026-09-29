@@ -167,7 +167,9 @@ public:
     Q_INVOKABLE void commitActive(const QString &message, bool amend, bool stageAll);
     Q_INVOKABLE void commitAndPushActive(const QString &message, bool amend, bool stageAll);
     Q_INVOKABLE void generateCommitMessage(const QString &existingMessage, int scope,
-                                           const QString &commitType, const QString &issueId);
+                                           const QString &commitType, const QString &issueId,
+                                           bool manualCompiled = false,
+                                           const QString &compileNote = QString());
     Q_INVOKABLE void pushActive();
     Q_INVOKABLE void checkoutBranch(const QString &branch);
     Q_INVOKABLE void checkoutRevision(const QString &revision);
@@ -306,6 +308,8 @@ private:
     QString m_aiExistingMessage;
     QString m_aiCommitType;
     QString m_aiIssueId;
+    bool m_aiManualCompiled = false;
+    QString m_aiCompileNote;
     QStringList m_aiChangedFiles;
     QStringList m_aiUntrackedFiles;
     quint64 m_revisionRequest = 0;

@@ -964,7 +964,8 @@ void WorkspaceController::commitAndPushActive(const QString &message, bool amend
 }
 
 void WorkspaceController::generateCommitMessage(const QString &existingMessage, int scope,
-                                                const QString &commitType, const QString &issueId)
+                                                const QString &commitType, const QString &issueId,
+                                                bool manualCompiled, const QString &compileNote)
 {
     if (m_activeIndex < 0 || busy()) return;
     if (scope != 0 && scope != 1) {
@@ -1017,6 +1018,8 @@ void WorkspaceController::generateCommitMessage(const QString &existingMessage, 
     m_aiExistingMessage = existingMessage;
     m_aiCommitType = normalizedType;
     m_aiIssueId = normalizedIssue;
+    m_aiManualCompiled = manualCompiled;
+    m_aiCompileNote = compileNote;
     m_aiChangedFiles.clear();
     m_aiUntrackedFiles.clear();
     ++m_aiRequest;
@@ -1919,7 +1922,8 @@ void WorkspaceController::onGitCommandFinished(const GitCommandResult &result)
             emit operationFailed(tr("AI 提交说明"), tr("暂存区 Diff 为空，未生成提交说明。"));
         } else {
             m_commitAi.generate(selectedName(), selectedBranch(), output, completed.paths,
-                                m_aiExistingMessage, m_aiCommitType, m_aiIssueId, false);
+                                m_aiExistingMessage, m_aiCommitType, m_aiIssueId, false,
+                                m_aiManualCompiled, m_aiCompileNote);
         }
         break;
     case GitCommandKind::AiWorkspaceFiles: {
@@ -1951,7 +1955,8 @@ void WorkspaceController::onGitCommandFinished(const GitCommandResult &result)
                 break;
             }
             m_commitAi.generate(selectedName(), selectedBranch(), preview, m_aiChangedFiles,
-                                m_aiExistingMessage, m_aiCommitType, m_aiIssueId, true);
+                                m_aiExistingMessage, m_aiCommitType, m_aiIssueId, true,
+                                m_aiManualCompiled, m_aiCompileNote);
             break;
         }
         GitCommand diff;
@@ -1977,7 +1982,8 @@ void WorkspaceController::onGitCommandFinished(const GitCommandResult &result)
             emit operationFailed(tr("AI 提交说明"), tr("仓库 Diff 为空，未生成提交说明。"));
         } else {
             m_commitAi.generate(selectedName(), selectedBranch(), combined, m_aiChangedFiles,
-                                m_aiExistingMessage, m_aiCommitType, m_aiIssueId, true);
+                                m_aiExistingMessage, m_aiCommitType, m_aiIssueId, true,
+                                m_aiManualCompiled, m_aiCompileNote);
         }
         break;
     }

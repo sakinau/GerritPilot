@@ -4,7 +4,7 @@ import QtQuick.Layouts
 import GerritPilot
 import "../../components"
 
-ColumnLayout {
+ScrollView {
     id: root
     property var workspace
     property var drafts: ({})
@@ -12,10 +12,14 @@ ColumnLayout {
     property string currentRepoPath: ""
     property string currentWorkspacePath: ""
     property string resultText: ""
-    readonly property bool hasStagedFiles: workspace.groupedChanges.some(function(file) { return file.staged })
-    readonly property bool hasConflicts: workspace.groupedChanges.some(function(file) { return file.conflict })
+    readonly property bool hasStagedFiles: workspace ? workspace.groupedChanges.some(function(file) { return file.staged }) : false
+    readonly property bool hasConflicts: workspace ? workspace.groupedChanges.some(function(file) { return file.conflict }) : false
     signal commitRequested(string message, bool amend, bool stageAll)
-    spacing: 8
+
+    clip: true
+    contentWidth: availableWidth
+    ScrollBar.vertical: RightScrollBar { id: vScrollBar }
+    ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
 
     Timer {
         id: draftSaveTimer
@@ -68,6 +72,7 @@ ColumnLayout {
     Component.onCompleted: switchDraft()
     Connections {
         target: root.workspace
+        ignoreUnknownSignals: true
         function onSelectedRepositoryChanged() {
             aiDialog.generating = false
             aiDialog.close()
@@ -88,6 +93,7 @@ ColumnLayout {
                 }
                 root.resultText = amendCheck.checked ? "修改提交成功" : "提交成功"
                 amendCheck.checked = false
+                root.ensureBottomVisible()
             } else if (root.drafts[key] === submittedMessage) {
                 delete root.drafts[key]
             }
@@ -98,6 +104,34 @@ ColumnLayout {
                 aiDialog.errorText = message
             }
         }
+    }
+
+    readonly property int pushStateWatcher: root.workspace ? root.workspace.pushState : 0
+    onPushStateWatcherChanged: {
+        if (pushStateWatcher !== 0) {
+            root.ensureBottomVisible()
+        }
+    }
+
+    readonly property string reviewUrlWatcher: root.workspace ? root.workspace.lastGerritReviewUrl : ""
+    onReviewUrlWatcherChanged: {
+        if (reviewUrlWatcher.length > 0) {
+            root.ensureBottomVisible()
+        }
+    }
+
+    onResultTextChanged: {
+        if (resultText.length > 0) {
+            root.ensureBottomVisible()
+        }
+    }
+
+    function ensureBottomVisible() {
+        Qt.callLater(function() {
+            if (root.contentItem && root.contentItem.contentHeight > root.height) {
+                root.contentItem.contentY = Math.max(0, root.contentItem.contentHeight - root.height)
+            }
+        })
     }
 
     Connections {
@@ -188,15 +222,68 @@ ColumnLayout {
                 color: Theme.text
                 font.pixelSize: Theme.fontSecondary
                 font.weight: Font.DemiBold
+                visible: aiTypeCombo.currentIndex === 0
             }
             TextField {
                 id: aiIssueField
                 objectName: "aiIssueField"
                 Layout.fillWidth: true
-                visible: true
+                visible: aiTypeCombo.currentIndex === 0
                 enabled: !aiDialog.generating
                 placeholderText: "需求/问题单号（可选，如 7063607059 或 m-xxx, r-xxx，逗号分隔多个，留空默认 m-0）"
                 font.pixelSize: Theme.fontSecondary
+            }
+            Text {
+                text: "编译验证"
+                color: Theme.text
+                font.pixelSize: Theme.fontSecondary
+                font.weight: Font.DemiBold
+            }
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: compileCol.implicitHeight + 14
+                radius: 6
+                color: "#F8F9FA"
+                border.color: Theme.separatorSoft
+                border.width: 1
+
+                ColumnLayout {
+                    id: compileCol
+                    anchors.fill: parent
+                    anchors.margins: 8
+                    spacing: 6
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 8
+
+                        FlatCheckBox {
+                            id: aiManualCompileCheck
+                            objectName: "aiManualCompileCheck"
+                            text: "人工已验证编译通过"
+                            checked: false
+                            enabled: !aiDialog.generating
+                        }
+
+                        Item { Layout.fillWidth: true }
+
+                        Text {
+                            text: aiManualCompileCheck.checked ? "✓ 输出编译通过说明" : "未勾选时输出 - Not run"
+                            color: aiManualCompileCheck.checked ? Theme.accent : Theme.secondaryText
+                            font.pixelSize: Theme.fontCaption
+                        }
+                    }
+
+                    TextField {
+                        id: aiCompileNoteField
+                        objectName: "aiCompileNoteField"
+                        Layout.fillWidth: true
+                        visible: aiManualCompileCheck.checked
+                        enabled: !aiDialog.generating
+                        placeholderText: "编译目标或平台（可选，留空默认：本地已验证编译通过）"
+                        font.pixelSize: Theme.fontSecondary
+                    }
+                }
             }
             Text {
                 Layout.fillWidth: true
@@ -252,178 +339,186 @@ ColumnLayout {
                         aiDialog.errorText = ""
                         aiDialog.generating = true
                         var typeKey = aiTypeCombo.typeKeys[aiTypeCombo.currentIndex] || "fix"
+                        var issueVal = aiIssueField.visible ? aiIssueField.text.trim() : ""
                         root.workspace.generateCommitMessage(editor.text, aiScopeCombo.currentIndex,
                                                              typeKey,
-                                                             aiIssueField.text.trim())
+                                                             issueVal,
+                                                             aiManualCompileCheck.checked,
+                                                             aiCompileNoteField.text.trim())
                     }
                 }
             }
         }
     }
 
-    RowLayout {
-        Layout.fillWidth: true
-        Text { text: "提交说明"; color: Theme.text; font.pixelSize: Theme.fontSubheading; font.weight: Font.DemiBold; Layout.alignment: Qt.AlignVCenter }
-        Item { Layout.fillWidth: true }
-        IconButton {
-            id: aiCommitButton
-            objectName: "aiCommitButton"
-            glyph: "✦"
-            toolTip: "打开 AI 提交说明面板"
-            Layout.preferredWidth: Theme.controlHeight
-            Layout.preferredHeight: Theme.controlHeight
-            enabled: root.workspace && root.workspace.selectedPath.length > 0
-            onClicked: aiDialog.open()
-        }
-    }
-    ScrollView {
-        id: messageScroll
-        Layout.fillWidth: true
-        Layout.fillHeight: true
-        Layout.minimumHeight: 90
-        Layout.preferredHeight: 120
-        clip: true
-        contentWidth: availableWidth
-        ScrollBar.vertical: RightScrollBar { }
-        ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
-        TextArea {
-            id: editor
-            objectName: "commitMessage"
-            placeholderText: "填写本次提交说明…"
-            selectByMouse: true
-            wrapMode: TextEdit.Wrap
-            padding: 10
-            color: Theme.text
-            font.pixelSize: Theme.fontBody
-            onTextChanged: {
-                drafts[draftKey] = text
-                draftSaveTimer.restart()
+    ColumnLayout {
+        id: mainContentCol
+        width: root.availableWidth
+        spacing: 6
+
+        RowLayout {
+            Layout.fillWidth: true
+            Text { text: "提交说明"; color: Theme.text; font.pixelSize: Theme.fontSubheading; font.weight: Font.DemiBold; Layout.alignment: Qt.AlignVCenter }
+            Item { Layout.fillWidth: true }
+            IconButton {
+                id: aiCommitButton
+                objectName: "aiCommitButton"
+                glyph: "✦"
+                toolTip: "打开 AI 提交说明面板"
+                Layout.preferredWidth: Theme.controlHeight
+                Layout.preferredHeight: Theme.controlHeight
+                enabled: root.workspace && root.workspace.selectedPath.length > 0
+                onClicked: aiDialog.open()
             }
-            background: Rectangle { color: Theme.surfaceMuted; radius: Theme.controlRadius; border.color: editor.activeFocus ? Theme.accent : Theme.separatorSoft }
         }
-    }
+        ScrollView {
+            id: messageScroll
+            Layout.fillWidth: true
+            Layout.minimumHeight: 64
+            Layout.preferredHeight: 100
+            implicitHeight: 100
+            clip: true
+            contentWidth: availableWidth
+            ScrollBar.vertical: RightScrollBar { }
+            ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+            TextArea {
+                id: editor
+                objectName: "commitMessage"
+                placeholderText: "填写本次提交说明…"
+                selectByMouse: true
+                wrapMode: TextEdit.Wrap
+                padding: 10
+                color: Theme.text
+                font.pixelSize: Theme.fontBody
+                onTextChanged: {
+                    drafts[draftKey] = text
+                    draftSaveTimer.restart()
+                }
+                background: Rectangle { color: Theme.surfaceMuted; radius: Theme.controlRadius; border.color: editor.activeFocus ? Theme.accent : Theme.separatorSoft }
+            }
+        }
 
-    RowLayout {
-        Layout.fillWidth: true
-        spacing: 8
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 8
 
-        FlatCheckBox {
-            id: amendCheck
-            objectName: "amendCheck"
-            text: "修改上次提交"
-            enabled: !root.workspace.busy && root.workspace.selectedPath.length > 0
-            onToggled: {
-                if (checked && editor.text.trim().length === 0 && root.workspace && typeof root.workspace.requestLastCommitMessage === "function") {
-                    root.workspace.requestLastCommitMessage()
+            FlatCheckBox {
+                id: amendCheck
+                objectName: "amendCheck"
+                text: "修改上次提交"
+                enabled: !root.workspace.busy && root.workspace.selectedPath.length > 0
+                onToggled: (checked) => {
+                    if (checked && editor.text.trim().length === 0 && root.workspace && typeof root.workspace.requestLastCommitMessage === "function") {
+                        root.workspace.requestLastCommitMessage()
+                    }
                 }
             }
         }
-    }
 
-    RowLayout {
-        Layout.fillWidth: true
-        spacing: 6
-
-        PrimaryButton {
-            objectName: "commitButton"
+        RowLayout {
             Layout.fillWidth: true
-            text: amendCheck.checked ? "修改上次提交" : "提交"
-            enabled: !root.workspace.busy && !root.workspace.detailsCached
-                     && root.workspace.selectedPath.length > 0
-                     && (root.hasStagedFiles || amendCheck.checked)
-                     && !root.hasConflicts && editor.text.trim().length > 0
-            onClicked: {
-                root.resultText = ""
-                root.commitRequested(editor.text, amendCheck.checked, false)
+            spacing: 6
+
+            PrimaryButton {
+                objectName: "commitButton"
+                Layout.fillWidth: true
+                text: amendCheck.checked ? "修改上次提交" : "提交"
+                enabled: !root.workspace.busy && !root.workspace.detailsCached
+                         && root.workspace.selectedPath.length > 0
+                         && (root.hasStagedFiles || amendCheck.checked)
+                         && !root.hasConflicts && editor.text.trim().length > 0
+                onClicked: {
+                    root.resultText = ""
+                    root.commitRequested(editor.text, amendCheck.checked, false)
+                }
             }
         }
 
-    }
+        RowLayout {
+            objectName: "pushStatusRow"
+            Layout.fillWidth: true
+            spacing: 6
+            visible: root.workspace && root.workspace.pushState !== undefined
+                     && root.workspace.pushState !== 0
+                     && root.workspace.pushRepositoryKey === root.draftKey
 
-    RowLayout {
-        objectName: "pushStatusRow"
-        Layout.fillWidth: true
-        spacing: 6
-        visible: root.workspace && root.workspace.pushState !== undefined
-                 && root.workspace.pushState !== 0
-                 && root.workspace.pushRepositoryKey === root.draftKey
+            BusyIndicator {
+                objectName: "pushBusyIndicator"
+                Layout.preferredWidth: Theme.controlHeight * 0.65
+                Layout.preferredHeight: Theme.controlHeight * 0.65
+                visible: root.workspace && root.workspace.pushState === 1
+                running: visible
+            }
 
-        BusyIndicator {
-            objectName: "pushBusyIndicator"
-            Layout.preferredWidth: Theme.controlHeight * 0.65
-            Layout.preferredHeight: Theme.controlHeight * 0.65
-            visible: root.workspace && root.workspace.pushState === 1
-            running: visible
+            Text {
+                Layout.fillWidth: true
+                text: root.workspace ? root.workspace.pushStatusText : ""
+                wrapMode: Text.Wrap
+                color: root.workspace && root.workspace.pushState === 3 ? Theme.red : Theme.secondaryText
+                font.pixelSize: Theme.fontSecondary
+            }
         }
 
         Text {
             Layout.fillWidth: true
-            text: root.workspace ? root.workspace.pushStatusText : ""
+            visible: root.resultText.length > 0
+            text: root.resultText
             wrapMode: Text.Wrap
-            color: root.workspace && root.workspace.pushState === 3 ? Theme.red : Theme.secondaryText
+            color: Theme.secondaryText
             font.pixelSize: Theme.fontSecondary
         }
-    }
 
-    Text {
-        Layout.fillWidth: true
-        visible: root.resultText.length > 0
-        text: root.resultText
-        wrapMode: Text.Wrap
-        color: Theme.secondaryText
-        font.pixelSize: Theme.fontSecondary
-    }
+        // Gerrit Review URL Card
+        Rectangle {
+            objectName: "gerritUrlCard"
+            Layout.fillWidth: true
+            Layout.preferredHeight: gerritUrlRow.implicitHeight + 12
+            radius: 6
+            color: Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.08)
+            border.color: Theme.accent
+            visible: root.workspace && root.workspace.pushRepositoryKey === root.draftKey
+                     && root.workspace.lastGerritReviewUrl && root.workspace.lastGerritReviewUrl.length > 0
 
-    // Gerrit Review URL Card
-    Rectangle {
-        objectName: "gerritUrlCard"
-        Layout.fillWidth: true
-        Layout.preferredHeight: gerritUrlRow.implicitHeight + 12
-        radius: 6
-        color: Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.08)
-        border.color: Theme.accent
-        visible: root.workspace && root.workspace.pushRepositoryKey === root.draftKey
-                 && root.workspace.lastGerritReviewUrl && root.workspace.lastGerritReviewUrl.length > 0
+            RowLayout {
+                id: gerritUrlRow
+                anchors.fill: parent
+                anchors.margins: 6
+                spacing: 6
 
-        RowLayout {
-            id: gerritUrlRow
-            anchors.fill: parent
-            anchors.margins: 6
-            spacing: 6
-
-            Text {
-                text: "🔗"
-                font.pixelSize: Theme.fontBody
-            }
-
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: 1
                 Text {
-                    text: "Gerrit 审查单已就绪"
-                    color: Theme.text
-                    font.pixelSize: Theme.fontSecondary
-                    font.bold: true
+                    text: "🔗"
+                    font.pixelSize: Theme.fontBody
                 }
-                Text {
-                    text: root.workspace ? root.workspace.lastGerritReviewUrl : ""
-                    color: Theme.accent
-                    font.pixelSize: Theme.fontSecondary
-                    elide: Text.ElideMiddle
+
+                ColumnLayout {
                     Layout.fillWidth: true
+                    spacing: 1
+                    Text {
+                        text: "Gerrit 审查单已就绪"
+                        color: Theme.text
+                        font.pixelSize: Theme.fontSecondary
+                        font.bold: true
+                    }
+                    Text {
+                        text: root.workspace ? root.workspace.lastGerritReviewUrl : ""
+                        color: Theme.accent
+                        font.pixelSize: Theme.fontSecondary
+                        elide: Text.ElideMiddle
+                        Layout.fillWidth: true
+                    }
                 }
-            }
 
-            IconButton {
-                objectName: "copyReviewUrlButton"
-                glyph: "⧉"
-                toolTip: "复制审查链接"
-                Layout.preferredHeight: Theme.controlHeight
-                Layout.preferredWidth: Theme.controlHeight
-                onClicked: {
-                    if (root.workspace && typeof root.workspace.copyToClipboard === "function") {
-                        root.workspace.copyToClipboard(root.workspace.lastGerritReviewUrl)
-                        root.resultText = "审查链接已复制"
+                IconButton {
+                    objectName: "copyReviewUrlButton"
+                    glyph: "⧉"
+                    toolTip: "复制审查链接"
+                    Layout.preferredHeight: Theme.controlHeight
+                    Layout.preferredWidth: Theme.controlHeight
+                    onClicked: {
+                        if (root.workspace && typeof root.workspace.copyToClipboard === "function") {
+                            root.workspace.copyToClipboard(root.workspace.lastGerritReviewUrl)
+                            root.resultText = "审查链接已复制"
+                        }
                     }
                 }
             }

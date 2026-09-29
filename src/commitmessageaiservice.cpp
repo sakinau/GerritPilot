@@ -192,7 +192,9 @@ QString CommitMessageAiService::validateAndNormalize(const QString &rawCandidate
                                                      const QString &repoName,
                                                      const QString &existingMessage,
                                                      const QString &commitType,
-                                                     const QString &issueId)
+                                                     const QString &issueId,
+                                                     bool manualCompiled,
+                                                     const QString &compileNote)
 {
     QString text = rawCandidate.trimmed();
 
@@ -262,6 +264,27 @@ QString CommitMessageAiService::validateAndNormalize(const QString &rawCandidate
 
     text = text.trimmed();
 
+    // Ensure Verification section strictly aligns with user's manual compilation choice
+    QString correctVerif;
+    if (manualCompiled) {
+        const QString detail = compileNote.trimmed().isEmpty() ? QStringLiteral("本地已验证编译通过") : compileNote.trimmed();
+        correctVerif = QStringLiteral("Verification:\n- Local build passed: %1").arg(detail);
+    } else {
+        correctVerif = QStringLiteral("Verification:\n- Not run; reason: 嵌入式交叉编译环境，未执行本地编译验证");
+    }
+
+    static const QRegularExpression verifSectionRegex(QStringLiteral(R"((?m)^Verification:\s*\n(?:[ \t]*- [^\n]*\n?)*)"));
+    if (verifSectionRegex.match(text).hasMatch()) {
+        text.replace(verifSectionRegex, correctVerif + QStringLiteral("\n"));
+    } else if (text.contains(QStringLiteral("Verification:"))) {
+        static const QRegularExpression singleVerifHeader(QStringLiteral(R"((?m)^Verification:.*$)"));
+        text.replace(singleVerifHeader, correctVerif);
+    } else {
+        text = text.trimmed() + QStringLiteral("\n\n") + correctVerif;
+    }
+
+    text = text.trimmed();
+
     // Append standard Gerrit trailers in strict order
     QStringList trailers;
     trailers.append(QStringLiteral("Issue: %1").arg(issueFooterText));
@@ -277,7 +300,8 @@ QString CommitMessageAiService::validateAndNormalize(const QString &rawCandidate
 void CommitMessageAiService::generate(const QString &repoName, const QString &branchName,
                                       const QString &diffText, const QStringList &changedFiles,
                                       const QString &existingMessage, const QString &commitType,
-                                      const QString &issueId, bool wholeRepository)
+                                      const QString &issueId, bool wholeRepository,
+                                      bool manualCompiled, const QString &compileNote)
 {
     cancel();
     m_lastError.clear();
@@ -291,6 +315,8 @@ void CommitMessageAiService::generate(const QString &repoName, const QString &br
     m_pendingExistingMsg = existingMessage;
     m_pendingCommitType = commitType;
     m_pendingIssueId = issueId;
+    m_pendingManualCompiled = manualCompiled;
+    m_pendingCompileNote = compileNote;
 
     QString issueHeader;
     if (issueId.trimmed().isEmpty()) {
@@ -313,6 +339,27 @@ void CommitMessageAiService::generate(const QString &repoName, const QString &br
     const QString scopeName = repoName.isEmpty() ? QStringLiteral("core") : repoName;
     const QString issueSummary = issueId.trimmed().isEmpty() ? QStringLiteral("N/A") : issueHeader;
 
+    QString verificationInstruction;
+    if (manualCompiled) {
+        const QString detail = compileNote.trimmed().isEmpty() ? QStringLiteral("本地已验证编译通过") : compileNote.trimmed();
+        verificationInstruction = QStringLiteral(
+            "4. 第四段 (Verification):\n"
+            "   - 以 'Verification:' 开头。\n"
+            "   - 本次修改经开发者【人工确认已完成编译验证】。\n"
+            "   - 必须在此段严格输出如下内容（技术术语保留英文）：\n"
+            "     - Local build passed: %1\n"
+        ).arg(detail);
+    } else {
+        verificationInstruction = QStringLiteral(
+            "4. 第四段 (Verification):\n"
+            "   - 以 'Verification:' 开头。\n"
+            "   - 本次提交【未执行本地编译验证】。\n"
+            "   - 必须在此段严格输出：\n"
+            "     - Not run; reason: 嵌入式交叉编译环境，未执行本地编译验证\n"
+            "     （严禁虚构或谎称已通过编译和测试）\n"
+        );
+    }
+
     // Prepare prompt adhering to company repo-commit skill & Gerrit standards
     QString userPrompt = QStringLiteral(
         "请根据以下代码差异（Git Diff），生成严格符合公司 repo + Gerrit 提交流程规范的 Commit Message。\n\n"
@@ -331,13 +378,9 @@ void CommitMessageAiService::generate(const QString &repoName, const QString &br
         "   - 概括本次提交的目的和背景，着重阐述【why 而非 what】（为什么改、解决什么业务或系统问题，而非机械罗列代码），中文优先。\n"
         "3. 第三段 (Changes):\n"
         "   - 以 'Changes:' 开头，逐条（以 '- ' 开头）列出涉及文件的具体修改要点，技术术语保留英文。\n"
-        "4. 第四段 (Verification):\n"
-        "   - 以 'Verification:' 开头。\n"
-        "   - 若无明确的测试验证结果，必须输出：\n"
-        "     - Not run; reason: 嵌入式交叉编译环境，无可用的本地构建/检查命令\n"
-        "     （或 - Not run），严禁虚构或谎称已通过编译和测试。\n"
+        "%8\n"
         "5. 尾部字段 (Trailers):\n"
-        "   - Issue: %8\n"
+        "   - Issue: %9\n"
         "   - Co-Authored-By: AI Coding Agent\n\n"
         "【质量与合规检查（若在 diff 中发现以下问题，请在 Changes 之后、Verification 之前以 'Notice:' 逐条客观提示开发者）】:\n"
         "- 调试残留: 是否包含 qDebug()、console.log、debugger、临时 printf 等\n"
@@ -353,6 +396,7 @@ void CommitMessageAiService::generate(const QString &repoName, const QString &br
                           : QStringLiteral("仅暂存区"),
           changedFiles.join(QLatin1Char('\n')),
           diffText.left(wholeRepository ? 8000 : 6000),
+          verificationInstruction,
           issueSummary);
 
     QJsonObject messageSystem;
@@ -443,7 +487,8 @@ void CommitMessageAiService::onReplyFinished()
     }
 
     m_lastCandidate = validateAndNormalize(content, m_pendingRepo, m_pendingExistingMsg,
-                                           m_pendingCommitType, m_pendingIssueId);
+                                           m_pendingCommitType, m_pendingIssueId,
+                                           m_pendingManualCompiled, m_pendingCompileNote);
     setBusy(false);
     emit candidateReady(m_lastCandidate);
 }
