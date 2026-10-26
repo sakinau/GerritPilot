@@ -1,6 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import QtQuick.Controls
+import QtQuick.Controls.Basic
 import QtQuick.Layouts
 import GerritPilot
 import "../../components"
@@ -76,6 +76,13 @@ Popup {
                 }
                 Text { text: "项目路径"; color: Theme.secondaryText; font.pixelSize: Theme.fontSecondary; font.weight: Font.DemiBold; Layout.topMargin: 18 }
                 TextField { font.pixelSize: Theme.fontBody; Layout.fillWidth: true; text: root.workspace.workspacePath; readOnly: true; placeholderText: "请通过添加项目导入" }
+                FlatCheckBox {
+                    text: "当前仓库提交时检查 Gerrit Change-Id Hook"
+                    checked: root.workspace ? root.workspace.requireChangeIdHook : true
+                    enabled: root.workspace && root.workspace.selectedPath.length > 0
+                    onToggled: root.workspace.requireChangeIdHook = checked
+                }
+                Text { text: "普通 Git 仓库可关闭；仅影响本地提交检查，不禁用 Git 自身的 Hook。Gerrit 推送仍会检查 Change-Id，当前应用尚不提供直接 Git 推送。"; color: Theme.tertiaryText; font.pixelSize: Theme.fontCaption; wrapMode: Text.Wrap; Layout.fillWidth: true }
                 RowLayout {
                     Layout.fillWidth: true
                     Text { text: "Gerrit SSH 配置"; color: Theme.secondaryText; font.pixelSize: Theme.fontSecondary; font.weight: Font.DemiBold; Layout.fillWidth: true }
@@ -156,9 +163,21 @@ Popup {
                         wrapMode: Text.Wrap
                     }
                 }
+                FlatCheckBox {
+                    text: "记住 API Key（明文保存在本机设置中）"
+                    checked: root.workspace && root.workspace.commitAi ? root.workspace.commitAi.rememberApiKey : false
+                    onToggled: if (root.workspace && root.workspace.commitAi) root.workspace.commitAi.rememberApiKey = checked
+                }
+                TextField {
+                    Layout.fillWidth: true
+                    font.pixelSize: Theme.fontBody
+                    text: root.workspace && root.workspace.commitAi ? root.workspace.commitAi.issuePrefix : ""
+                    placeholderText: "纯数字单号前缀（留空默认 m-；无单号使用 m-0）"
+                    onEditingFinished: if (root.workspace && root.workspace.commitAi) root.workspace.commitAi.issuePrefix = text.trim()
+                }
                 Text {
                     Layout.fillWidth: true
-                    text: "未配置时不生成；测试只发送简短消息，不上传代码。"
+                    text: "生成时会将所选范围的代码差异发送至配置的 API；请确认有权发送。未配置时不生成。测试连接不上传代码。不记住密钥时可每次输入或使用 GERRITPILOT_AI_API_KEY 环境变量。"
                     color: Theme.tertiaryText
                     font.pixelSize: Theme.fontCaption
                     wrapMode: Text.Wrap

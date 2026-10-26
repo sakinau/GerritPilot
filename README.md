@@ -2,6 +2,11 @@
 
 使用 Qt 6.8.3、QML 和 C++ 开发的 `repo + Gerrit` 多仓代码管理工具。界面采用受 iOS/macOS 启发的设计语言：低噪声色彩、分层卡片、圆角操作控件、侧栏导航和明确的确认流程。
 
+> 完整项目文档已统一沉淀至项目知识库：**[code/Readme/GerritPilot](/home/liushuai/code/Readme/GerritPilot/README.md)**
+> - [功能与操作指南](/home/liushuai/code/Readme/GerritPilot/功能与操作指南.md)
+> - [系统架构与核心设计](/home/liushuai/code/Readme/GerritPilot/系统架构与核心设计.md)
+> - [构建部署与验收规范](/home/liushuai/code/Readme/GerritPilot/构建部署与验收规范.md)
+
 ## 当前能力
 
 - 读取 `.repo/project.list` 或单 Git 仓库

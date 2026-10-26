@@ -1,8 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import QtQuick.Controls
+import QtQuick.Controls.Basic
 import QtQuick.Layouts
-import QtQuick.Dialogs
 import GerritPilot
 import "../components"
 import "../features/navigation"
@@ -33,13 +32,21 @@ Item {
         anchors.fill: parent
         orientation: Qt.Horizontal
         handle: Rectangle {
-            implicitWidth: 6
+            implicitWidth: 8
             color: "transparent"
             Rectangle {
                 anchors.centerIn: parent
-                width: (SplitHandle.pressed || SplitHandle.hovered) ? 2 : 1
+                width: 1
                 height: parent.height
-                color: (SplitHandle.pressed || SplitHandle.hovered) ? Theme.accent : Theme.separator
+                color: SplitHandle.pressed ? Theme.accent : Theme.separator
+            }
+            Rectangle {
+                anchors.centerIn: parent
+                width: 4
+                height: 34
+                radius: 2
+                visible: SplitHandle.pressed || SplitHandle.hovered
+                color: SplitHandle.pressed ? Theme.accent : Theme.scrollThumb
             }
         }
 
@@ -51,9 +58,7 @@ Item {
             workspace: page.workspaceApi
             collapsed: page.sidebarCollapsed
             onToggleRequested: page.sidebarCollapsed = !page.sidebarCollapsed
-            onSettingsRequested: settingsPanel.open()
             onSyncRequested: actionDialogs.openSync()
-            onBranchRequested: branchPanel.open()
         }
 
         Item {
@@ -61,7 +66,7 @@ Item {
 
             ColumnLayout {
                 anchors.fill: parent
-                anchors.leftMargin: 8
+                anchors.leftMargin: 5
                 anchors.rightMargin: 8
                 anchors.topMargin: 8
                 anchors.bottomMargin: 8
@@ -87,11 +92,6 @@ Item {
                 }
             }
         }
-    }
-
-    WorkspaceFolderDialog {
-        id: folderDialog
-        workspace: page.workspaceApi
     }
 
     ActionDialogs {

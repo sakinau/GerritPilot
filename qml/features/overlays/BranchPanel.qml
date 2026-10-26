@@ -1,5 +1,5 @@
 import QtQuick
-import QtQuick.Controls
+import QtQuick.Controls.Basic
 import QtQuick.Layouts
 import GerritPilot
 import "../../components"
@@ -200,63 +200,24 @@ Item {
         id: createBranchDialog
         objectName: "createBranchDialog"
         preferredWidth: 470
-        title: "新建本地分支"
+        title: "创建本地分支"
         standardButtons: Dialog.Cancel | Dialog.Ok
         readonly property string trimmedName: newBranchName.text.trim()
-        readonly property bool isDuplicate: root.workspace && root.workspace.availableBranches && root.workspace.availableBranches.indexOf(trimmedName) !== -1
-        readonly property bool canAccept: trimmedName.length > 0 && !isDuplicate
-
+        readonly property bool isDuplicate: root.workspace && root.workspace.availableBranches
+            && root.workspace.availableBranches.indexOf(trimmedName) !== -1
+        readonly property bool canAccept: trimmedName.length > 0 && !isDuplicate && root.workspace && !root.workspace.busy
         function updateOkButton() {
-            const okBtn = createBranchDialog.standardButton(Dialog.Ok)
-            if (okBtn) okBtn.enabled = canAccept
+            const button = standardButton(Dialog.Ok)
+            if (button) { button.enabled = canAccept; button.text = "创建并切换" }
         }
-
-        onOpened: {
-            newBranchName.text = ""
-            newBranchName.forceActiveFocus()
-            updateOkButton()
-        }
+        onOpened: { newBranchName.text = ""; newBranchName.forceActiveFocus(); updateOkButton() }
         onCanAcceptChanged: updateOkButton()
-        onAccepted: {
-            if (canAccept && root.workspace) {
-                const useRepo = (root.workspace.isRepoWorkspace && repoStartCheck.checked)
-                root.workspace.createBranch(trimmedName, useRepo)
-            }
-        }
+        onAccepted: if (canAccept) root.workspace.createBranch(trimmedName)
         contentItem: ColumnLayout {
-            width: parent.width
             spacing: 10
-            Text {
-                text: (root.workspace && root.workspace.isRepoWorkspace && repoStartCheck.checked)
-                    ? ("将在当前项目执行: repo start " + (createBranchDialog.trimmedName || "<分支名>") + " .")
-                    : ("新分支将基于 " + (root.workspace ? root.workspace.selectedBranch : "") + " 创建并立即切换。")
-                color: Theme.secondaryText
-                font.pixelSize: Theme.fontSecondary
-            }
-            TextField { font.pixelSize: Theme.fontBody;
-                id: newBranchName
-                objectName: "newBranchName"
-                Layout.fillWidth: true
-                placeholderText: "例如 feature/avm-manual"
-                selectByMouse: true
-                onAccepted: {
-                    if (createBranchDialog.canAccept) {
-                        createBranchDialog.accept()
-                    }
-                }
-            }
-            FlatCheckBox {
-                id: repoStartCheck
-                visible: root.workspace && root.workspace.isRepoWorkspace
-                text: "使用 repo start 创建开发分支（关联 Manifest 上游）"
-                checked: true
-            }
-            Text {
-                visible: createBranchDialog.isDuplicate
-                text: "⚠️ 分支 “" + createBranchDialog.trimmedName + "” 已存在，请换一个名称或直接切换。"
-                color: Theme.orange
-                font.pixelSize: Theme.fontSecondary
-            }
+            Text { text: "从当前 HEAD 创建并切换到本地分支，保留工作区改动。不修改 Manifest，不创建远端分支。"; wrapMode: Text.Wrap; Layout.fillWidth: true; color: Theme.secondaryText; font.pixelSize: Theme.fontSecondary }
+            TextField { id: newBranchName; objectName: "newBranchName"; Layout.fillWidth: true; placeholderText: "例如 feature/new-feature"; selectByMouse: true; font.pixelSize: Theme.fontBody; onAccepted: if (createBranchDialog.canAccept) createBranchDialog.accept() }
+            Text { visible: createBranchDialog.isDuplicate; text: "同名本地分支已存在，请选择其他名称或切换到已有分支。"; wrapMode: Text.Wrap; Layout.fillWidth: true; color: Theme.orange; font.pixelSize: Theme.fontSecondary }
         }
     }
 }

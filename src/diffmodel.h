@@ -3,107 +3,51 @@
 #include <QList>
 #include <QRegularExpression>
 #include <QString>
-#include <QStringList>
 
-struct DiffHunk {
-    int index = 0;
-    QString header;
-    int oldStart = 0;
-    int oldCount = 0;
-    int newStart = 0;
-    int newCount = 0;
-    QStringList lines;
-    QString patch;
+struct DiffRange {
+    qsizetype start = 0;
+    qsizetype end = 0;
 };
 
-struct DiffFile {
-    QString oldPath;
-    QString newPath;
+struct DiffIndex {
+    qsizetype headerEnd = 0;
     bool isBinary = false;
-    bool isNewFile = false;
-    bool isDeleted = false;
-    QString fileHeader;
-    QList<DiffHunk> hunks;
+    QList<DiffRange> hunks;
 };
 
 class DiffModel
 {
 public:
-    static DiffFile parse(const QString &diffText)
+    // Metadata only: no split line list, code copies, or per-hunk patch strings.
+    static DiffIndex index(const QString &text)
     {
-        DiffFile file;
-        if (diffText.isEmpty()) return file;
-
-        const QStringList rawLines = diffText.split(QLatin1Char('\n'));
-        if (rawLines.isEmpty()) return file;
-
-        QStringList headerLines;
-        int lineIdx = 0;
-
-        // Check for binary
-        if (diffText.contains(QStringLiteral("Binary files ")) || diffText.contains(QStringLiteral("GIT binary patch"))) {
-            file.isBinary = true;
-        }
-
-        // Parse header lines until the first hunk line (@@)
-        while (lineIdx < rawLines.size()) {
-            const QString &line = rawLines.at(lineIdx);
-            if (line.startsWith(QStringLiteral("@@ ")))
-                break;
-            headerLines.append(line);
-            if (line.startsWith(QStringLiteral("--- a/"))) {
-                file.oldPath = line.mid(6);
-            } else if (line.startsWith(QStringLiteral("+++ b/"))) {
-                file.newPath = line.mid(6);
-            } else if (line.startsWith(QStringLiteral("new file mode"))) {
-                file.isNewFile = true;
-            } else if (line.startsWith(QStringLiteral("deleted file mode"))) {
-                file.isDeleted = true;
+        DiffIndex result;
+        result.isBinary = text.contains(QStringLiteral("Binary files "))
+            || text.contains(QStringLiteral("GIT binary patch"));
+        static const QRegularExpression header(QStringLiteral(R"(^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@)"));
+        qsizetype cursor = 0;
+        while (cursor < text.size()) {
+            const qsizetype newline = text.indexOf(QLatin1Char('\n'), cursor);
+            const qsizetype end = newline < 0 ? text.size() : newline;
+            if (end - cursor >= 3 && text.at(cursor) == QLatin1Char('@')
+                && text.at(cursor + 1) == QLatin1Char('@') && text.at(cursor + 2) == QLatin1Char(' ')
+                && header.match(text.mid(cursor, end - cursor)).hasMatch()) {
+                if (result.hunks.isEmpty()) result.headerEnd = cursor;
+                else result.hunks.last().end = cursor;
+                result.hunks.append(DiffRange{cursor, text.size()});
             }
-            ++lineIdx;
+            cursor = newline < 0 ? text.size() : newline + 1;
         }
+        return result;
+    }
 
-        file.fileHeader = headerLines.join(QLatin1Char('\n'));
-        if (!file.fileHeader.isEmpty())
-            file.fileHeader += QLatin1Char('\n');
-
-        // Parse hunks
-        static const QRegularExpression hunkRegex(QStringLiteral(R"(^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@)"));
-        DiffHunk currentHunk;
-        bool inHunk = false;
-        int hunkIndex = 0;
-
-        while (lineIdx < rawLines.size()) {
-            const QString &line = rawLines.at(lineIdx);
-            auto match = hunkRegex.match(line);
-            if (match.hasMatch()) {
-                if (inHunk) {
-                    currentHunk.patch = file.fileHeader + currentHunk.header + QLatin1Char('\n')
-                                      + currentHunk.lines.join(QLatin1Char('\n')) + QLatin1Char('\n');
-                    file.hunks.append(currentHunk);
-                }
-                inHunk = true;
-                currentHunk = DiffHunk();
-                currentHunk.index = hunkIndex++;
-                currentHunk.header = line;
-                currentHunk.oldStart = match.captured(1).toInt();
-                currentHunk.oldCount = match.captured(2).isEmpty() ? 1 : match.captured(2).toInt();
-                currentHunk.newStart = match.captured(3).toInt();
-                currentHunk.newCount = match.captured(4).isEmpty() ? 1 : match.captured(4).toInt();
-            } else if (inHunk) {
-                if (!line.isEmpty() || lineIdx + 1 < rawLines.size()) {
-                    currentHunk.lines.append(line);
-                }
-            }
-            ++lineIdx;
-        }
-
-        if (inHunk && !currentHunk.lines.isEmpty()) {
-            currentHunk.patch = file.fileHeader + currentHunk.header + QLatin1Char('\n')
-                              + currentHunk.lines.join(QLatin1Char('\n')) + QLatin1Char('\n');
-            file.hunks.append(currentHunk);
-        }
-
-        return file;
+    static QString patch(const QString &text, const DiffIndex &index, int hunk)
+    {
+        if (index.isBinary || hunk < 0 || hunk >= index.hunks.size()) return {};
+        const auto &range = index.hunks.at(hunk);
+        if (range.start < index.headerEnd || range.end > text.size() || range.end <= range.start) return {};
+        QString result = text.left(index.headerEnd) + text.mid(range.start, range.end - range.start);
+        if (!result.endsWith(QLatin1Char('\n'))) result += QLatin1Char('\n');
+        return result;
     }
 };

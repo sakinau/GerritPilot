@@ -1,5 +1,5 @@
 import QtQuick
-import QtQuick.Controls
+import QtQuick.Controls.Basic
 import GerritPilot
 import "pages"
 
@@ -12,7 +12,14 @@ ApplicationWindow {
     minimumWidth: 1120
     minimumHeight: 720
     visible: true
-    title: "GerritPilot"
+    title: {
+        const api = workspacePage ? workspacePage.workspaceApi : null
+        const project = api && api.projectManager ? api.projectManager.currentProjectName : ""
+        const repository = api ? api.selectedName : ""
+        if (project.length && repository.length)
+            return project + " · " + repository
+        return project || repository || "未选择项目"
+    }
     color: Theme.canvas
     font.pixelSize: Theme.fontBody
 

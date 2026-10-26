@@ -1,7 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
-import QtQuick.Controls
+import QtQuick.Controls.Basic
 import QtQuick.Layouts
 import GerritPilot
 import "DiffParser.js" as DiffParser
@@ -23,37 +23,34 @@ Item {
     readonly property int maxRenderedLines: 2000
     property bool showAllDiff: false
     property int windowStart: 0
+    readonly property int fullRenderWarningLines: 20000
 
-    FontMetrics {
-        id: monoMetrics
-        font.family: "DejaVu Sans Mono"
-        font.pointSize: root.codeFontSize || 11
+    function requestFullDiff() {
+        if (totalLineCount > fullRenderWarningLines) fullRenderConfirm.open()
+        else showAllDiff = true
     }
 
-    readonly property int maxLineChars: {
-        let maxLen = 40
-        const rows = displayParsedRows
-        for (let i = 0; i < rows.length; ++i) {
-            const t = rows[i].text
-            if (t) {
-                let len = 0
-                for (let c = 0; c < t.length; ++c) {
-                    len += (t.charCodeAt(c) === 9) ? 8 : 1
-                }
-                if (len > maxLen) maxLen = len
-            }
+    AppDialog {
+        id: fullRenderConfirm
+        objectName: "fullDiffRenderConfirmation"
+        title: "加载超长 Diff"
+        preferredWidth: 460
+        standardButtons: Dialog.Cancel | Dialog.Ok
+        onAccepted: root.showAllDiff = true
+        contentItem: Label {
+            text: "将一次显示 " + root.totalLineCount + " 行，可能占用较多内存并造成卡顿。\n取消后仍可通过分页、搜索查看全部改动。"
+            wrapMode: Text.Wrap
+            font.pixelSize: Theme.fontBody
+            color: Theme.text
         }
-        return maxLen
-    }
-
-    readonly property real estimatedLineWidth: {
-        const charWidth = Math.max(7.5, monoMetrics.averageCharacterWidth)
-        return (maxLineChars + 24) * charWidth + 80
     }
 
     readonly property var parsedRows: renderingEnabled ? DiffParser.parse(diffText) : []
     readonly property var pairedRows: renderingEnabled && sideBySide ? DiffParser.paired(parsedRows) : []
-    readonly property int totalLineCount: parsedRows.length
+    // Page in display order. Paired rows are not monotonic in sourceIndex:
+    // a long removal block may pair with additions thousands of source rows later.
+    readonly property var navigationRows: sideBySide ? pairedRows : parsedRows
+    readonly property int totalLineCount: navigationRows.length
     readonly property bool isTruncated: !showAllDiff && totalLineCount > maxRenderedLines
     readonly property int windowEnd: isTruncated ? Math.min(totalLineCount, windowStart + maxRenderedLines) : totalLineCount
 
@@ -64,21 +61,11 @@ Item {
 
     readonly property var displayPairedRows: {
         if (!isTruncated) return pairedRows
-        const pTotal = pairedRows.length
-        if (pTotal === 0) return []
-        let pStart = 0
-        while (pStart < pTotal && (pairedRows[pStart].maxSourceIndex !== undefined ? pairedRows[pStart].maxSourceIndex : pairedRows[pStart].sourceIndex) < windowStart) {
-            pStart++
-        }
-        let pEnd = pStart
-        while (pEnd < pTotal && pairedRows[pEnd].sourceIndex < windowEnd) {
-            pEnd++
-        }
-        return pairedRows.slice(pStart, pEnd)
+        return pairedRows.slice(windowStart, windowEnd)
     }
 
     readonly property bool isBinary: {
-        if (workspace && workspace.isBinaryDiff) return true
+        if (workspace && isWorktreeDiff && workspace.isBinaryDiff) return true
         return diffText.indexOf("Binary files ") >= 0 || diffText.indexOf("GIT binary patch") >= 0
     }
     readonly property bool isWorktreeDiff: workspace && workspace.selectedFile && diffText === workspace.diffText
@@ -93,18 +80,9 @@ Item {
         ? Number(workspace.hunkCount)
         : parsedHunkCount
 
-    readonly property int searchMatchCount: {
-        if (!searchQuery.trim() || !diffText) return 0
-        const query = searchQuery.trim().toLowerCase()
-        let count = 0
-        let pos = 0
-        const lower = diffText.toLowerCase()
-        while ((pos = lower.indexOf(query, pos)) !== -1) {
-            count++
-            pos += query.length
-        }
-        return count
-    }
+    readonly property var searchIndex: renderingEnabled && searchQuery.trim().length
+        ? DiffParser.searchIndex(parsedRows, searchQuery) : ({count: 0, rows: []})
+    readonly property int searchMatchCount: searchIndex.count
 
     onHunkTotalChanged: {
         if (currentHunkIndex >= hunkTotal)
@@ -112,6 +90,7 @@ Item {
     }
 
     onDiffTextChanged: {
+        fullRenderConfirm.close()
         currentHunkIndex = 0
         windowStart = 0
         showAllDiff = false
@@ -130,7 +109,13 @@ Item {
     }
 
     onSideBySideChanged: {
+        windowStart = 0
+        ensureHunkInWindow(currentHunkIndex)
         Qt.callLater(scrollToCurrentHunk)
+    }
+
+    onRenderingEnabledChanged: {
+        if (!renderingEnabled) fullRenderConfirm.close()
     }
 
     Timer {
@@ -183,7 +168,7 @@ Item {
         const isActiveHunk = root.hunkTotal > 0 && hunkIdx === root.currentHunkIndex && hunkIdx >= 0
 
         if (!row) {
-            return isActiveHunk ? "<span style='background-color:#F8FAFC'> </span><br>" : "<br>"
+            return isActiveHunk ? "<span style='background-color:#F8FAFC'> </span>" : " "
         }
 
         let color = "#3A3A3C"
@@ -236,7 +221,7 @@ Item {
 
         return "<span style='color:" + numColor + ";background-color:" + numBg + "'>" + numbers
              + "</span><span style='color:" + color + ";background-color:" + background + (isHunkHeader && isActiveHunk ? ";font-weight:bold" : "") + "'> "
-             + prefix + " " + textFormatted + "</span><br>"
+             + prefix + " " + textFormatted + "</span>"
     }
 
     function renderedDiff(oldSide, unified, query, fontSize) {
@@ -245,22 +230,30 @@ Item {
             return "<span style='color:#8E8E93'>当前没有可显示的代码 Diff</span>"
         const effectiveQuery = (query !== undefined ? query : root.searchQuery)
         const size = (fontSize || root.codeFontSize || 11)
-        let html = "<pre style='font-family:DejaVu Sans Mono;font-size:" + size + "pt;margin:0'>"
+        // Each display row must be a separate QTextDocument block. Thousands
+        // of <br> lines in one <pre> become a single oversized scene-graph text
+        // block, which can disappear when its middle enters the viewport.
+        const blockStart = "<pre style='font-family:DejaVu Sans Mono;font-size:" + size + "pt;margin:0'>"
+        const blocks = []
         if (unified) {
-            for (const row of rows) html += rowHtml(row, false, true, row.hunkIndex, effectiveQuery)
+            for (const row of rows)
+                blocks.push(blockStart + rowHtml(row, false, true, row.hunkIndex, effectiveQuery) + "</pre>")
         } else {
-            for (const pair of rows) html += rowHtml(oldSide ? pair.left : pair.right, oldSide, false, pair.hunkIndex, effectiveQuery)
+            for (const pair of rows)
+                blocks.push(blockStart + rowHtml(oldSide ? pair.left : pair.right, oldSide, false, pair.hunkIndex, effectiveQuery) + "</pre>")
         }
-        return html + "</pre>"
+        return blocks.join("")
     }
 
     function ensureHunkInWindow(hunkIndex) {
-        if (root.showAllDiff || root.parsedRows.length <= root.maxRenderedLines) return
+        if (!root.isTruncated) return
         if (hunkIndex < 0 || root.hunkTotal <= 0) return
 
         let hunkRow = -1
-        for (let i = 0; i < root.parsedRows.length; ++i) {
-            if (root.parsedRows[i].kind === "hunk" && root.parsedRows[i].hunkIndex === hunkIndex) {
+        const rows = root.navigationRows
+        for (let i = 0; i < rows.length; ++i) {
+            const row = root.sideBySide ? rows[i].left : rows[i]
+            if (row && row.kind === "hunk" && row.hunkIndex === hunkIndex) {
                 hunkRow = i
                 break
             }
@@ -270,9 +263,9 @@ Item {
         if (hunkRow < root.windowStart || hunkRow >= root.windowEnd) {
             const halfWindow = Math.floor(root.maxRenderedLines / 2)
             let newStart = Math.max(0, hunkRow - halfWindow)
-            let newEnd = Math.min(root.parsedRows.length, newStart + root.maxRenderedLines)
-            if (newEnd === root.parsedRows.length) {
-                newStart = Math.max(0, root.parsedRows.length - root.maxRenderedLines)
+            let newEnd = Math.min(root.totalLineCount, newStart + root.maxRenderedLines)
+            if (newEnd === root.totalLineCount) {
+                newStart = Math.max(0, root.totalLineCount - root.maxRenderedLines)
             }
             root.windowStart = newStart
         }
@@ -334,29 +327,21 @@ Item {
 
     function scrollToSearchMatch(matchIdx) {
         if (!root.searchQuery || searchMatchCount <= 0) return
-        const query = root.searchQuery.toLowerCase()
-        let matchCounter = 0
-        let targetParsedRow = -1
-
-        for (let i = 0; i < root.parsedRows.length; ++i) {
-            const rowText = root.parsedRows[i].text.toLowerCase()
-            let pos = 0
-            while ((pos = rowText.indexOf(query, pos)) !== -1) {
-                if (matchCounter === matchIdx) {
-                    targetParsedRow = i
-                    break
-                }
-                matchCounter++
-                pos += query.length
-            }
-            if (targetParsedRow >= 0) break
-        }
+        const targetParsedRow = DiffParser.matchRow(root.searchIndex, matchIdx)
 
         if (targetParsedRow < 0) return
 
-        if (root.isTruncated && (targetParsedRow < root.windowStart || targetParsedRow >= root.windowEnd)) {
+        let targetDisplayRow = targetParsedRow
+        if (root.sideBySide) {
+            targetDisplayRow = root.pairedRows.findIndex(pair =>
+                (pair.left && pair.left.sourceIndex === targetParsedRow)
+                || (pair.right && pair.right.sourceIndex === targetParsedRow))
+        }
+        if (targetDisplayRow < 0) return
+
+        if (root.isTruncated && (targetDisplayRow < root.windowStart || targetDisplayRow >= root.windowEnd)) {
             const halfWindow = Math.floor(root.maxRenderedLines / 2)
-            let newStart = Math.max(0, targetParsedRow - halfWindow)
+            let newStart = Math.max(0, targetDisplayRow - halfWindow)
             let newEnd = Math.min(root.totalLineCount, newStart + root.maxRenderedLines)
             if (newEnd === root.totalLineCount) {
                 newStart = Math.max(0, root.totalLineCount - root.maxRenderedLines)
@@ -367,13 +352,7 @@ Item {
         Qt.callLater(function() {
             const rows = root.sideBySide ? root.displayPairedRows : root.displayParsedRows
             if (!rows || rows.length === 0) return
-            let rowInDisplay = -1
-            if (!root.sideBySide) {
-                rowInDisplay = targetParsedRow - (root.isTruncated ? root.windowStart : 0)
-            } else {
-                const fraction = targetParsedRow / Math.max(1, root.totalLineCount)
-                rowInDisplay = Math.floor(fraction * rows.length)
-            }
+            const rowInDisplay = targetDisplayRow - (root.isTruncated ? root.windowStart : 0)
             if (rowInDisplay >= 0 && rowInDisplay < rows.length) {
                 const fraction = rowInDisplay / rows.length
                 if (diffScroll.contentItem && diffScroll.contentItem.contentHeight > 0) {
@@ -389,12 +368,17 @@ Item {
 
     function prevWindowPage() {
         windowStart = Math.max(0, windowStart - maxRenderedLines)
-        if (diffScroll.contentItem) diffScroll.contentItem.contentY = 0
+        Qt.callLater(function() {
+            if (diffScroll.contentItem) diffScroll.contentItem.contentY = 0
+        })
     }
 
     function nextWindowPage() {
-        windowStart = Math.min(Math.max(0, totalLineCount - maxRenderedLines), windowStart + maxRenderedLines)
-        if (diffScroll.contentItem) diffScroll.contentItem.contentY = 0
+        if (windowEnd >= totalLineCount) return
+        windowStart += maxRenderedLines
+        Qt.callLater(function() {
+            if (diffScroll.contentItem) diffScroll.contentItem.contentY = 0
+        })
     }
 
     ColumnLayout {
@@ -669,30 +653,37 @@ Item {
 
         // Large Diff Notification Banner (Windowed mode)
         Rectangle {
+            objectName: "largeDiffBanner"
             visible: root.isTruncated
             Layout.fillWidth: true
-            Layout.preferredHeight: 38
+            Layout.preferredHeight: pageControls.implicitHeight + 16
             radius: 8
             color: "#FFF9E6"
             border.color: "#FFE082"
             clip: true
 
-            RowLayout {
-                anchors.fill: parent
-                anchors.leftMargin: 12
-                anchors.rightMargin: 12
+            ColumnLayout {
+                id: pageControls
+                x: 12
+                y: 8
+                width: parent.width - 24
                 spacing: 8
 
                 Text {
-                    text: "⚠️ Diff 较大（共 " + root.totalLineCount + " 行），当前窗口展示第 " + (root.windowStart + 1) + " ~ " + root.windowEnd + " 行"
+                    text: "当前显示 " + (root.windowStart + 1) + "–" + root.windowEnd + " / " + root.totalLineCount + " 行，后续内容可翻页查看"
                     color: "#7A5E0B"
                     font.pixelSize: Theme.fontSecondary
                     Layout.fillWidth: true
-                    elide: Text.ElideRight
+                    wrapMode: Text.Wrap
                 }
+
+                Flow {
+                    Layout.fillWidth: true
+                    spacing: 8
 
                 ToolButton {
                     id: prevPageBtn
+                    objectName: "previousDiffPageButton"
                     text: "◀ 上一页"
                     implicitHeight: 28
                     implicitWidth: prevPageText.implicitWidth + 16
@@ -727,6 +718,7 @@ Item {
 
                 ToolButton {
                     id: nextPageBtn
+                    objectName: "nextDiffPageButton"
                     text: "下一页 ▶"
                     implicitHeight: 28
                     implicitWidth: nextPageText.implicitWidth + 16
@@ -760,8 +752,9 @@ Item {
                 }
 
                 PrimaryButton {
+                    objectName: "showAllDiffButton"
                     text: "加载全部"
-                    onClicked: root.showAllDiff = true
+                    onClicked: root.requestFullDiff()
                 }
 
                 PrimaryButton {
@@ -770,6 +763,7 @@ Item {
                     secondary: true
                     onClicked: root.workspace.openFile(root.workspace.selectedFile)
                 }
+                }
             }
         }
 
@@ -777,7 +771,7 @@ Item {
         Rectangle {
             visible: root.totalLineCount > root.maxRenderedLines && root.showAllDiff
             Layout.fillWidth: true
-            Layout.preferredHeight: 34
+            Layout.preferredHeight: Math.max(34, Theme.controlHeight + 16)
             radius: 8
             color: "#EBF3FB"
             border.color: "#BBD7F0"
@@ -800,7 +794,12 @@ Item {
                 PrimaryButton {
                     text: "恢复窗口化"
                     secondary: true
-                    onClicked: root.showAllDiff = false
+                    onClicked: {
+                        root.windowStart = 0
+                        root.showAllDiff = false
+                        root.ensureHunkInWindow(root.currentHunkIndex)
+                        Qt.callLater(root.scrollToCurrentHunk)
+                    }
                 }
             }
         }

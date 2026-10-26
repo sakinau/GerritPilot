@@ -1,6 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import QtQuick.Controls
+import QtQuick.Controls.Basic
 import QtQuick.Layouts
 import GerritPilot
 import "../../components"
@@ -18,7 +18,6 @@ GlassCard {
 
     signal tabRequested(int index)
     signal branchRequested()
-    signal hookRequested()
     signal settingsRequested()
     signal revisionRequested(string revision)
     signal revisionCheckoutRequested(string revision)
@@ -81,10 +80,10 @@ GlassCard {
         anchors.margins: 8
         spacing: 8
 
-        // Unified Single Top Header Bar (Repo Info + Segmented Tabs + Action Buttons)
+        // Keep repository identity and actions on one stable toolbar.
         RowLayout {
             Layout.fillWidth: true
-            Layout.preferredHeight: 32
+            Layout.preferredHeight: 36
             spacing: 8
 
             // Left Section: Repo Badge + Name + Branch Pill
@@ -166,54 +165,6 @@ GlassCard {
                     text: "从左侧选择一个仓库"
                     color: Theme.secondaryText
                     font.pixelSize: Theme.fontSecondary
-                }
-            }
-
-            Item { Layout.fillWidth: true }
-
-            // Center: Compact Segmented Tab Switcher [工作区改动 | 提交历史]
-            Rectangle {
-                implicitWidth: 190
-                implicitHeight: 28
-                radius: 7
-                color: "#EEF0F4"
-                border.color: Theme.separatorSoft
-                border.width: 1
-                Layout.alignment: Qt.AlignVCenter
-
-                RowLayout {
-                    anchors.fill: parent
-                    anchors.margins: 2
-                    spacing: 2
-
-                    Repeater {
-                        model: ["工作区改动", "提交历史"]
-                        Button {
-                            id: tabButton
-                            required property int index
-                            required property string modelData
-                            Layout.fillWidth: true
-                            Layout.fillHeight: true
-                            text: modelData
-                            padding: 0
-                            hoverEnabled: true
-                            onClicked: root.tabRequested(index)
-                            background: Rectangle {
-                                radius: 5
-                                color: root.currentTab === tabButton.index ? Theme.surfaceStrong : (tabButton.hovered ? "#F8F9FA" : "transparent")
-                                border.color: root.currentTab === tabButton.index ? Theme.separatorSoft : "transparent"
-                                border.width: root.currentTab === tabButton.index ? 1 : 0
-                            }
-                            contentItem: Text {
-                                text: tabButton.text
-                                color: root.currentTab === tabButton.index ? Theme.text : Theme.secondaryText
-                                font.pixelSize: Theme.fontSecondary
-                                font.weight: root.currentTab === tabButton.index ? Font.DemiBold : Font.Medium
-                                horizontalAlignment: Text.AlignHCenter
-                                verticalAlignment: Text.AlignVCenter
-                            }
-                        }
-                    }
                 }
             }
 
@@ -304,6 +255,69 @@ GlassCard {
             }
         }
 
+        // Content navigation belongs to the page, not between repository actions.
+        Item {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 36
+
+            Rectangle {
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                height: 1
+                color: Theme.separatorSoft
+            }
+
+            RowLayout {
+                anchors.fill: parent
+                spacing: 4
+
+                Repeater {
+                    model: ["工作区改动", "提交历史"]
+                    Button {
+                        id: tabButton
+                        required property int index
+                        required property string modelData
+                        Layout.preferredWidth: index === 0 ? 108 : 88
+                        Layout.fillHeight: true
+                        text: modelData
+                        padding: 0
+                        hoverEnabled: true
+                        onClicked: root.tabRequested(index)
+                        background: Item {
+                            Rectangle {
+                                anchors.fill: parent
+                                anchors.bottomMargin: 2
+                                radius: 6
+                                color: tabButton.hovered ? Theme.surfaceMuted : "transparent"
+                            }
+                            Rectangle {
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.bottom: parent.bottom
+                                anchors.leftMargin: 8
+                                anchors.rightMargin: 8
+                                height: 2
+                                radius: 1
+                                visible: root.currentTab === tabButton.index
+                                color: Theme.accent
+                            }
+                        }
+                        contentItem: Text {
+                            text: tabButton.text
+                            color: root.currentTab === tabButton.index ? Theme.accent : Theme.secondaryText
+                            font.pixelSize: Theme.fontBody
+                            font.weight: root.currentTab === tabButton.index ? Font.DemiBold : Font.Medium
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                    }
+                }
+
+                Item { Layout.fillWidth: true }
+            }
+        }
+
         Rectangle {
             id: operationBanner
             readonly property bool hasConflicts: root.workspace ? Boolean(root.workspace.hasConflicts) : false
@@ -329,7 +343,9 @@ GlassCard {
                 Text {
                     text: operationBanner.hasConflicts
                         ? ("⚠️ " + operationBanner.operationLabel + "存在 " + operationBanner.conflictCount + " 个冲突文件")
-                        : ("ℹ️ " + operationBanner.operationLabel + "已无未解决冲突，可以继续或终止")
+                        : root.workspace && root.workspace.canSkipCherryPick
+                            ? "当前拣选没有剩余改动，可跳过当前提交或终止"
+                            : ("ℹ️ " + operationBanner.operationLabel + "已无未解决冲突，可以继续或终止")
                     color: operationBanner.hasConflicts ? "#B76E00" : Theme.accent
                     font.pixelSize: Theme.fontSecondary
                     font.weight: Font.DemiBold
@@ -347,6 +363,7 @@ GlassCard {
                     Layout.fillWidth: true
                     spacing: 8
                     Item { Layout.fillWidth: true }
+                    CherryPickSkipAction { workspace: root.workspace }
                     PrimaryButton {
                         visible: operationBanner.hasConflicts
                         text: "标记选中已解决"
@@ -384,13 +401,21 @@ GlassCard {
                 orientation: Qt.Horizontal
                 clip: true
                 handle: Rectangle {
-                    implicitWidth: 6
+                    implicitWidth: 8
                     color: "transparent"
                     Rectangle {
                         anchors.centerIn: parent
-                        width: (SplitHandle.pressed || SplitHandle.hovered) ? 2 : 1
+                        width: 1
                         height: parent.height
-                        color: (SplitHandle.pressed || SplitHandle.hovered) ? Theme.accent : Theme.separatorSoft
+                        color: SplitHandle.pressed ? Theme.accent : Theme.separatorSoft
+                    }
+                    Rectangle {
+                        anchors.centerIn: parent
+                        width: 4
+                        height: 34
+                        radius: 2
+                        visible: SplitHandle.pressed || SplitHandle.hovered
+                        color: SplitHandle.pressed ? Theme.accent : Theme.scrollThumb
                     }
                 }
                 GlassCard {
@@ -402,19 +427,28 @@ GlassCard {
                     SplitView.maximumWidth: 700
                     clip: true
                     SplitView {
+                        objectName: "changesCommitSplit"
                         anchors.fill: parent
                         anchors.margins: 0
                         anchors.rightMargin: 10
                         orientation: Qt.Vertical
                         clip: true
                         handle: Rectangle {
-                            implicitHeight: 6
+                            implicitHeight: 8
                             color: "transparent"
                             Rectangle {
                                 anchors.centerIn: parent
-                                height: (SplitHandle.pressed || SplitHandle.hovered) ? 2 : 1
+                                height: 1
                                 width: parent.width
-                                color: (SplitHandle.pressed || SplitHandle.hovered) ? Theme.accent : Theme.separatorSoft
+                                color: SplitHandle.pressed ? Theme.accent : Theme.separatorSoft
+                            }
+                            Rectangle {
+                                anchors.centerIn: parent
+                                width: 34
+                                height: 4
+                                radius: 2
+                                color: SplitHandle.pressed ? Theme.accent
+                                    : SplitHandle.hovered ? Theme.scrollThumb : Theme.separatorSoft
                             }
                         }
                     ChangesFileList {
@@ -429,8 +463,8 @@ GlassCard {
                     }
                         CommitEditor {
                             objectName: "commitEditorPane"
-                            SplitView.preferredHeight: Math.max(180, Math.min(220, implicitHeight))
-                            SplitView.minimumHeight: 120
+                            SplitView.preferredHeight: 320
+                            SplitView.minimumHeight: minimumPaneHeight
                             workspace: root.workspace
                             onCommitRequested: (message, amend, stageAll) => root.commitRequested(message, amend, stageAll)
                         }
@@ -468,7 +502,9 @@ GlassCard {
                             }
                             Button {
                                 id: workingTreeButton
-                                text: "工作区改动"
+                                text: "全部改动"
+                                ToolTip.visible: hovered
+                                ToolTip.text: "返回当前仓库的完整工作区差异"
                                 implicitWidth: 76
                                 implicitHeight: 22
                                 padding: 0

@@ -1,5 +1,5 @@
 import QtQuick
-import QtQuick.Controls
+import QtQuick.Controls.Basic
 import QtQuick.Layouts
 import GerritPilot
 import "../../components"
@@ -26,6 +26,8 @@ Item {
         readonly property int totalCount: root.workspace ? (typeof root.workspace.repositoryCount !== "undefined" ? root.workspace.repositoryCount : (typeof root.workspace.totalRepositoryCount === "function" ? root.workspace.totalRepositoryCount() : 0)) : 0
         readonly property bool hasActiveRepo: root.workspace && root.workspace.selectedPath && root.workspace.selectedPath.length > 0
         readonly property bool repoAvailable: root.workspace && root.workspace.isRepoWorkspace
+        readonly property bool initializedOnly: repoAvailable && (totalCount === 0
+            || (totalCount === 1 && root.workspace.selectedPath === ".repo/manifests"))
         readonly property string previewCommand: {
             if (!root.workspace) return "未选择任何仓库"
             if (syncMethod === 1 && typeof root.workspace.syncPreview === "function")
@@ -50,7 +52,7 @@ Item {
             if (syncMethod === 1 && !repoAvailable) return false
             if (syncScope === 0) return hasActiveRepo
             if (syncScope === 1) return checkedCount > 0
-            if (syncScope === 2) return totalCount > 0
+            if (syncScope === 2) return syncMethod === 1 ? repoAvailable : totalCount > 0
             return false
         }
 
@@ -60,16 +62,16 @@ Item {
         }
 
         onOpened: {
-            if (checkedCount > 0) {
-                syncScope = 1
-            } else if (repoAvailable) {
+            if (initializedOnly) {
                 syncScope = 2
+            } else if (checkedCount > 0) {
+                syncScope = 1
             } else if (hasActiveRepo) {
                 syncScope = 0
             } else {
                 syncScope = 2
             }
-            syncMethod = repoAvailable ? 1 : 0
+            syncMethod = initializedOnly ? 1 : (hasActiveRepo || checkedCount > 0 ? 0 : (repoAvailable ? 1 : 0))
             updateOkButton()
         }
 
@@ -91,7 +93,7 @@ Item {
 
             Text {
                 text: syncDialog.syncMethod === 1
-                    ? "按当前本地 Manifest 同步所选仓库；适用于 detached 仓库，不需要 Git 上游分支。"
+                    ? "按当前本地 Manifest 同步代码，不需要 Git 上游分支。"
                     : "通过快进（fast-forward）拉取所选仓库的 Git 上游分支。"
                 Layout.fillWidth: true
                 wrapMode: Text.Wrap
@@ -117,7 +119,9 @@ Item {
 
             Text {
                 visible: syncDialog.syncMethod === 1
-                text: "仅同步下面选定的仓库；使用 --no-manifest-update，不强制覆盖本地改动。同步可能更新代码，发生冲突时会保留现场并显示命令日志。"
+                text: syncDialog.syncScope === 2
+                    ? "将同步整个项目，可能下载大量代码。使用本地 Manifest，不更新清单检出、不强制覆盖改动；失败保留现场。确认范围后再执行。"
+                    : "仅同步所选业务仓库；使用本地 Manifest，不更新清单检出、不强制覆盖改动。Manifest 仓库本身请使用 Git 拉取。"
                 Layout.fillWidth: true
                 wrapMode: Text.Wrap
                 color: Theme.secondaryText
@@ -151,9 +155,9 @@ Item {
                 }
                 RadioButton {
                     id: scopeAllRadio
-                    text: "全部仓库 (" + syncDialog.totalCount + ")"
+                    text: syncDialog.syncMethod === 1 ? "整个项目" : "全部仓库 (" + syncDialog.totalCount + ")"
                     checked: syncDialog.syncScope === 2
-                    enabled: syncDialog.totalCount > 0
+                    enabled: syncDialog.syncMethod === 1 ? syncDialog.repoAvailable : syncDialog.totalCount > 0
                     onClicked: syncDialog.syncScope = 2
                 }
             }
@@ -506,7 +510,7 @@ Item {
                         id: branchSearchInput
                         objectName: "branchSearchInput"
                         Layout.fillWidth: true
-                        placeholderText: "搜索远端分支，如 T1TP"
+                        placeholderText: "搜索远端目标分支"
                         font.pixelSize: Theme.fontSecondary
                         onTextChanged: {
                             pushDialog.selectedTargetBranch = ""

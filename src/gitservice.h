@@ -24,6 +24,9 @@ enum class GitCommandKind {
     Branches,
     DiscardPreflight,
     CommitScopePreflight,
+    HookStatus,
+    HookCommitPreflight,
+    HookRepairPreflight,
     HookRemoteUrl,
     HookDirectory,
     PushChangeIdPreflight,
@@ -48,9 +51,11 @@ enum class GitCommandKind {
     HunkOperation,
     InstallHook,
     GerritPush,
-    RepoStart,
+    RepoList,
+    ManifestRepository,
     RepoPrune,
     CherryPick,
+    CherryPickSkipPreflight,
     General
 };
 
@@ -62,6 +67,24 @@ enum class ExecutionStatus {
 };
 
 struct GitCommand {
+    struct RemoteTarget {
+        QString remote;
+        QString branch;
+        QString topic;
+        QString localBranch;
+        quint64 request = 0;
+    };
+    struct HookTransfer {
+        QString source;
+        QString port;
+        QString targetPath;
+        QString temporaryPath;
+    };
+    struct StashAction {
+        QString action;
+        QString expectedSha;
+        QString title;
+    };
     QString program = QStringLiteral("git");
     QStringList arguments;
     QString workingDirectory;
@@ -77,13 +100,14 @@ struct GitCommand {
     bool appendHistory = false;
     quint64 diffRequest = 0;
     bool commitOperation = false;
-    bool pushAfterCommit = false;
-    QString pushRemote;
-    QString pushTargetBranch;
-    QString pushTopic;
     QString workspacePath;
     QString submittedMessage;
     QStringList paths;
+    RemoteTarget target;
+    HookTransfer hook;
+    StashAction stash;
+    QString revision;
+    bool rediscoverProjects = false;
     QStringList affectedRepositories;
     int timeoutMilliseconds = 0;
     QByteArray standardInput;

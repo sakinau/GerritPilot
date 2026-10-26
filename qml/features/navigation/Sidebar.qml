@@ -1,5 +1,5 @@
 import QtQuick
-import QtQuick.Controls
+import QtQuick.Controls.Basic
 import QtQuick.Layouts
 import GerritPilot
 import "../../components"
@@ -12,9 +12,7 @@ Rectangle {
     property bool collapsed: false
 
     signal toggleRequested()
-    signal settingsRequested()
     signal syncRequested()
-    signal branchRequested()
 
     function openProjectManager(tabIndex) {
         if (typeof tabIndex === "number")
@@ -54,13 +52,6 @@ Rectangle {
 
     color: Theme.sidebar
 
-    Rectangle {
-        anchors.right: parent.right
-        width: 1
-        height: parent.height
-        color: Theme.separator
-    }
-
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: root.collapsed ? 12 : 16
@@ -68,28 +59,43 @@ Rectangle {
 
         RowLayout {
             Layout.fillWidth: true
-            Layout.bottomMargin: 10
-            spacing: 11
-            AppIcon { }
+            Layout.preferredHeight: 40
+            Layout.bottomMargin: 12
+            spacing: 10
+            AppIcon {
+                implicitWidth: 34
+                implicitHeight: 34
+                Layout.alignment: Qt.AlignVCenter
+                MouseArea {
+                    anchors.fill: parent
+                    visible: root.collapsed
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root.toggleRequested()
+                    ToolTip.visible: containsMouse
+                    ToolTip.text: "展开侧栏（Ctrl+B）"
+                }
+            }
             ColumnLayout {
                 visible: !root.collapsed
-                spacing: -1
+                spacing: 1
                 Text {
                     text: "GerritPilot"
                     color: Theme.text
-                    font.pixelSize: Theme.fontSubheading
+                    font.pixelSize: Theme.fontHeading
                     font.weight: Font.DemiBold
                 }
                 Text {
-                    text: "代码评审工作区"
+                    text: "代码工作区"
                     color: Theme.tertiaryText
                     font.pixelSize: Theme.fontCaption
                 }
             }
             Item { Layout.fillWidth: true }
             IconButton {
-                glyph: root.collapsed ? "›" : "‹"
-                toolTip: root.collapsed ? "展开侧栏（Ctrl+B）" : "收起侧栏（Ctrl+B）"
+                visible: !root.collapsed
+                glyph: "‹"
+                toolTip: "收起侧栏（Ctrl+B）"
                 onClicked: root.toggleRequested()
             }
         }
@@ -233,7 +239,7 @@ Rectangle {
                 }
 
                 MenuItem {
-                    text: "＋  新建 / 拉取项目…"
+                    text: "添加项目…"
                     onTriggered: {
                         projectManagerDialog.currentTab = 0
                         projectManagerDialog.open()
@@ -241,9 +247,9 @@ Rectangle {
                 }
 
                 MenuItem {
-                    text: "⚙  管理项目列表…"
+                    text: "管理项目列表…"
                     onTriggered: {
-                        projectManagerDialog.currentTab = 1
+                        projectManagerDialog.currentTab = 2
                         projectManagerDialog.open()
                     }
                 }

@@ -14,6 +14,7 @@ public:
         QString remote = QStringLiteral("origin");
         QString targetBranch;
         bool targetBranchConfirmed = false;
+        bool requireChangeIdHook = true; // Preserve Gerrit safety; ordinary Git users can opt out per repository.
         QString topic;
         QString gerritHost;
         QString gerritUser;
@@ -74,6 +75,7 @@ public:
         if (config.targetBranchConfirmed)
             config.targetBranch = settings.value(prefix + QStringLiteral("targetBranch")).toString().trimmed();
         config.topic = settings.value(prefix + QStringLiteral("topic")).toString();
+        config.requireChangeIdHook = settings.value(prefix + QStringLiteral("requireChangeIdHook"), true).toBool();
         config.gerritHost = settings.value(prefix + QStringLiteral("gerritHost")).toString();
         config.gerritPort = settings.value(prefix + QStringLiteral("gerritPort"), 29418).toInt();
         config.gerritUser = settings.value(prefix + QStringLiteral("gerritUser"),
@@ -93,6 +95,7 @@ public:
             settings.setValue(prefix + QStringLiteral("targetBranchConfirmed"), true);
         }
         settings.setValue(prefix + QStringLiteral("topic"), config.topic);
+        settings.setValue(prefix + QStringLiteral("requireChangeIdHook"), config.requireChangeIdHook);
         settings.setValue(prefix + QStringLiteral("gerritHost"), config.gerritHost);
         settings.setValue(prefix + QStringLiteral("gerritPort"), config.gerritPort);
         settings.setValue(prefix + QStringLiteral("gerritUser"), config.gerritUser);
@@ -129,11 +132,12 @@ public:
         }
     }
 
-    static void clearDraft(const QString &workspace, const QString &repository)
+    static void clearSubmittedDraft(const QString &workspace, const QString &repository, const QString &submitted)
     {
         if (workspace.isEmpty() || repository.isEmpty()) return;
         QSettings settings;
-        settings.remove(draftKey(workspace, repository));
+        const QString key = draftKey(workspace, repository);
+        if (settings.value(key).toString() == submitted) settings.remove(key);
     }
 
     // Deduce Gerrit connection settings (host, port, user) from a Git remote URL

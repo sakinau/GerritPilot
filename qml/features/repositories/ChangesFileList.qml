@@ -1,6 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import QtQuick.Controls
+import QtQuick.Controls.Basic
 import QtQuick.Layouts
 import GerritPilot
 import "../../components"
@@ -20,6 +20,18 @@ ColumnLayout {
     function clearCheckedFiles() {
         checkedFiles = {}
         checkedFilesCount = 0
+    }
+
+    function reconcileCheckedFiles() {
+        const available = {}
+        for (const file of displayedChanges || [])
+            available[(file.staged ? "S:" : "U:") + file.path] = true
+        const kept = {}
+        for (const key in checkedFiles) {
+            if (available[key]) kept[key] = checkedFiles[key]
+        }
+        checkedFiles = kept
+        checkedFilesCount = Object.keys(kept).length
     }
 
     function toggleFileCheck(path, staged, conflict) {
@@ -84,7 +96,7 @@ ColumnLayout {
             root.clearCheckedFiles()
         }
         function onDetailsTextChanged() {
-            root.clearCheckedFiles()
+            Qt.callLater(root.reconcileCheckedFiles)
         }
     }
 
@@ -122,7 +134,8 @@ ColumnLayout {
 
                 Button {
                     id: stageCheckedBtn
-                    text: "暂存已选"
+                    objectName: "stageSelectedFilesButton"
+                    text: "暂存选中"
                     implicitHeight: 26
                     implicitWidth: stageCheckedText.implicitWidth + 14
                     padding: 0
@@ -406,6 +419,7 @@ ColumnLayout {
 
                 FlatCheckBox {
                     id: fileCheck
+                    controlled: true
                     checked: !!(changeRow.modelData && root.checkedFiles[(changeRow.modelData.staged ? "S:" : "U:") + changeRow.modelData.path])
                     Layout.preferredWidth: 18
                     Layout.preferredHeight: 18

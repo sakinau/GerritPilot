@@ -48,6 +48,41 @@ function parse(value) {
     return result
 }
 
+// One small entry per matching row, not per occurrence or a lowercased full diff.
+function searchIndex(rows, query) {
+    const result = {count: 0, rows: []}
+    const needle = query.trim().toLowerCase()
+    if (!needle.length) return result
+    for (let i = 0; i < rows.length; ++i) {
+        const text = rows[i].text.toLowerCase()
+        let count = 0
+        let pos = 0
+        while ((pos = text.indexOf(needle, pos)) !== -1) {
+            ++count
+            pos += needle.length
+        }
+        if (count) {
+            result.rows.push({row: i, first: result.count, count: count})
+            result.count += count
+        }
+    }
+    return result
+}
+
+function matchRow(index, match) {
+    if (match < 0 || match >= index.count) return -1
+    let low = 0
+    let high = index.rows.length - 1
+    while (low <= high) {
+        const middle = Math.floor((low + high) / 2)
+        const entry = index.rows[middle]
+        if (match < entry.first) high = middle - 1
+        else if (match >= entry.first + entry.count) low = middle + 1
+        else return entry.row
+    }
+    return -1
+}
+
 function paired(rows) {
     const result = []
     let removed = []

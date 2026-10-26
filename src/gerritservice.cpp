@@ -2,7 +2,6 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
-#include <QProcess>
 #include <QUrl>
 
 GerritService::GerritService(QObject *parent)
@@ -10,32 +9,21 @@ GerritService::GerritService(QObject *parent)
 {
 }
 
-void GerritService::setLastReviewUrl(const QString &url)
+GitCommand GerritService::createQueryHookPathCommand(int repoIndex, const QString &repoAbsPath,
+                                                    const QString &repoRelPath, GitCommandKind kind) const
 {
-    if (m_lastReviewUrl != url) {
-        m_lastReviewUrl = url;
-        emit lastReviewUrlChanged(m_lastReviewUrl);
-    }
-}
-
-bool GerritService::checkHasCommitHook(const QString &repoAbsPath)
-{
-    const QFileInfo hook(effectiveHookPath(repoAbsPath));
-    return hook.isFile() && hook.isExecutable();
-}
-
-QString GerritService::effectiveHookPath(const QString &repoAbsPath)
-{
-    if (repoAbsPath.isEmpty()) return {};
-    QProcess process;
-    process.setWorkingDirectory(repoAbsPath);
-    process.start(QStringLiteral("git"), {QStringLiteral("rev-parse"),
+    GitCommand command;
+    command.arguments = {QStringLiteral("rev-parse"),
         QStringLiteral("--path-format=absolute"), QStringLiteral("--git-path"),
-        QStringLiteral("hooks/commit-msg")});
-    if (!process.waitForStarted(1000) || !process.waitForFinished(1000)
-        || process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0)
-        return {};
-    return QString::fromLocal8Bit(process.readAllStandardOutput()).trimmed();
+        QStringLiteral("hooks/commit-msg")};
+    command.workingDirectory = repoAbsPath;
+    command.repositoryIndex = repoIndex;
+    command.repositoryPath = repoRelPath;
+    command.kind = kind;
+    command.title = tr("检查 Change-Id Hook");
+    command.stopOnFailure = kind != GitCommandKind::HookStatus;
+    command.timeoutMilliseconds = 5000;
+    return command;
 }
 
 bool GerritService::hookSourceFromRemoteUrl(const QString &url, QString *source,
@@ -89,21 +77,23 @@ GitCommand GerritService::createQueryHookRemoteCommand(int repoIndex, const QStr
 }
 
 GitCommand GerritService::createInstallHookCommand(const GitCommand &completedQueryCommand,
-                                                   const QString &hookPath) const
+                                                   const QString &hookPath, const QString &temporaryPath) const
 {
     GitCommand command;
     command.program = QStringLiteral("scp");
     command.arguments = {QStringLiteral("-O"), QStringLiteral("-p"),
                          QStringLiteral("-B"), QStringLiteral("-o"),
                          QStringLiteral("ConnectTimeout=8")};
-    if (!completedQueryCommand.paths.value(1).isEmpty())
-        command.arguments.append({QStringLiteral("-P"), completedQueryCommand.paths.value(1)});
-    command.arguments.append({completedQueryCommand.paths.value(0), hookPath});
+    if (!completedQueryCommand.hook.port.isEmpty())
+        command.arguments.append({QStringLiteral("-P"), completedQueryCommand.hook.port});
+    command.arguments.append({completedQueryCommand.hook.source, temporaryPath});
     command.kind = GitCommandKind::InstallHook;
     command.workingDirectory = completedQueryCommand.workingDirectory;
     command.repositoryIndex = completedQueryCommand.repositoryIndex;
     command.repositoryPath = completedQueryCommand.repositoryPath;
-    command.paths = {hookPath};
+    command.hook = completedQueryCommand.hook;
+    command.hook.targetPath = hookPath;
+    command.hook.temporaryPath = temporaryPath;
     command.title = tr("安装 Change-Id Hook");
     command.stopOnFailure = true;
     command.timeoutMilliseconds = 30000;

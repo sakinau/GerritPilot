@@ -5,6 +5,7 @@ import GerritPilot
 Item {
     id: root
     property bool checked: false
+    property bool controlled: false
     property string text: ""
     signal toggled(bool checked)
     implicitWidth: text.length > 0 ? (row.implicitWidth + 4) : 18
@@ -37,8 +38,10 @@ Item {
         anchors.fill: parent
         cursorShape: Qt.PointingHandCursor
         onClicked: {
-            root.checked = !root.checked
-            root.toggled(root.checked)
+            const nextChecked = !root.checked
+            if (!root.controlled)
+                root.checked = nextChecked
+            root.toggled(nextChecked)
         }
     }
 }

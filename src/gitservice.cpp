@@ -37,8 +37,14 @@ QString GitService::displayCommand(const QString &program, const QStringList &ar
 {
     QStringList escaped;
     for (QString value : arguments) {
-        if (value.startsWith("https://") || value.startsWith("http://"))
-            value = QUrl(value).toString(QUrl::RemoveUserInfo);
+        // Also cover --repo-url=https://... and signed/tokenized URL queries.
+        static const QRegularExpression urlPattern(QStringLiteral(R"((?:https?|ssh)://[^\s]+)"),
+                                                   QRegularExpression::CaseInsensitiveOption);
+        const auto match = urlPattern.match(value);
+        if (match.hasMatch()) {
+            const QString safeUrl = QUrl(match.captured()).toString(QUrl::RemoveUserInfo | QUrl::RemoveQuery | QUrl::RemoveFragment);
+            value.replace(match.capturedStart(), match.capturedLength(), safeUrl);
+        }
         if (value.contains(QRegularExpression(QStringLiteral("[\\s\"']")))) {
             value.replace(QLatin1Char('\''), QStringLiteral("'\\''"));
             value = QLatin1Char('\'') + value + QLatin1Char('\'');
@@ -83,6 +89,13 @@ void GitService::enqueue(GitCommand command)
     } else if (command.kind == GitCommandKind::RevisionDiff) {
         for (int i = m_queue.size() - 1; i >= 0; --i) {
             if (m_queue.at(i).kind == GitCommandKind::RevisionDiff)
+                m_queue.removeAt(i);
+        }
+    } else if (command.kind == GitCommandKind::HookStatus) {
+        // Display-only checks are replaceable when the user switches rapidly.
+        // Never remove commit/repair preflights from a write operation.
+        for (int i = m_queue.size() - 1; i >= 0; --i) {
+            if (m_queue.at(i).kind == GitCommandKind::HookStatus)
                 m_queue.removeAt(i);
         }
     } else if (command.kind == GitCommandKind::Diff) {

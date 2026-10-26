@@ -1,6 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import QtQuick.Controls
+import QtQuick.Controls.Basic
 import QtQuick.Layouts
 import GerritPilot
 import "../../components"
@@ -36,13 +36,21 @@ ColumnLayout {
         Layout.fillHeight: true
         orientation: Qt.Vertical
         handle: Rectangle {
-            implicitHeight: 6
+            implicitHeight: 8
             color: "transparent"
             Rectangle {
                 anchors.centerIn: parent
-                height: (SplitHandle.pressed || SplitHandle.hovered) ? 2 : 1
+                height: 1
                 width: parent.width
-                color: (SplitHandle.pressed || SplitHandle.hovered) ? Theme.accent : Theme.separatorSoft
+                color: SplitHandle.pressed ? Theme.accent : Theme.separatorSoft
+            }
+            Rectangle {
+                anchors.centerIn: parent
+                width: 34
+                height: 4
+                radius: 2
+                visible: SplitHandle.pressed || SplitHandle.hovered
+                color: SplitHandle.pressed ? Theme.accent : Theme.scrollThumb
             }
         }
         ColumnLayout {
@@ -225,9 +233,10 @@ ColumnLayout {
                 Layout.fillWidth: true
                 Text {
                     Layout.fillWidth: true
-                    text: root.searchFilter.trim().length > 0
+                    text: (root.workspace && root.workspace.historyCached ? "缓存预览 · " : "")
+                        + (root.searchFilter.trim().length > 0
                         ? ("匹配 " + root.filteredEntries.length + " / 已加载 " + (root.workspace ? root.workspace.historyEntries.length : 0) + " 条")
-                        : ("已加载 " + (root.workspace ? root.workspace.historyEntries.length : 0) + " 条提交")
+                        : ("已加载 " + (root.workspace ? root.workspace.historyEntries.length : 0) + " 条提交"))
                     color: Theme.tertiaryText
                     font.pixelSize: Theme.fontCaption
                 }
@@ -272,13 +281,21 @@ ColumnLayout {
                 Layout.fillHeight: true
                 orientation: Qt.Horizontal
                 handle: Rectangle {
-                    implicitWidth: 6
+                    implicitWidth: 8
                     color: "transparent"
                     Rectangle {
                         anchors.centerIn: parent
-                        width: (SplitHandle.pressed || SplitHandle.hovered) ? 2 : 1
+                        width: 1
                         height: parent.height
-                        color: (SplitHandle.pressed || SplitHandle.hovered) ? Theme.accent : Theme.separatorSoft
+                        color: SplitHandle.pressed ? Theme.accent : Theme.separatorSoft
+                    }
+                    Rectangle {
+                        anchors.centerIn: parent
+                        width: 4
+                        height: 34
+                        radius: 2
+                        visible: SplitHandle.pressed || SplitHandle.hovered
+                        color: SplitHandle.pressed ? Theme.accent : Theme.scrollThumb
                     }
                 }
                 ListView {

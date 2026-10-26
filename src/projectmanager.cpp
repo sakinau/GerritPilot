@@ -120,10 +120,9 @@ void ProjectManager::switchProject(int index)
 
     if (m_controller && !targetPath.isEmpty()) {
         m_controller->setWorkspacePath(targetPath);
-        if (QFileInfo(QDir(targetPath).filePath(QStringLiteral(".repo/project.list"))).isFile()
+        if (QFileInfo(QDir(targetPath).filePath(QStringLiteral(".repo"))).isDir()
             || QFileInfo(QDir(targetPath).filePath(QStringLiteral(".git"))).exists()) {
             m_controller->scanWorkspace();
-            m_controller->refreshAll();
         }
     }
 

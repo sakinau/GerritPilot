@@ -8,7 +8,6 @@
 #include "workspacesettings.h"
 #include "repositorywatcher.h"
 #include "diffmodel.h"
-#include "commitworkflowservice.h"
 #include "gerritservice.h"
 #include "commitmessageaiservice.h"
 #include "projectmanager.h"
@@ -20,7 +19,6 @@
 class WorkspaceController final : public QObject
 {
     Q_OBJECT
-    Q_PROPERTY(CommitWorkflowService* commitWorkflow READ commitWorkflow CONSTANT)
     Q_PROPERTY(GerritService* gerrit READ gerrit CONSTANT)
     Q_PROPERTY(CommitMessageAiService* commitAi READ commitAi CONSTANT)
     Q_PROPERTY(RepositoryModel *repositoryModelSource READ repositoryModelSource CONSTANT)
@@ -29,22 +27,22 @@ class WorkspaceController final : public QObject
     Q_PROPERTY(QString workspacePath READ workspacePath WRITE setWorkspacePath NOTIFY workspacePathChanged)
     Q_PROPERTY(QString selectedName READ selectedName NOTIFY selectedRepositoryChanged)
     Q_PROPERTY(QString selectedPath READ selectedPath NOTIFY selectedRepositoryChanged)
-    Q_PROPERTY(QString selectedBranch READ selectedBranch NOTIFY selectedRepositoryChanged)
+    Q_PROPERTY(QString operationGeneration READ operationGeneration NOTIFY selectedRepositoryChanged)
+    Q_PROPERTY(QString selectedBranch READ selectedBranch NOTIFY summaryChanged)
     Q_PROPERTY(QStringList availableBranches READ availableBranches NOTIFY branchesChanged)
     Q_PROPERTY(QStringList remoteBranches READ remoteBranches NOTIFY branchesChanged)
     Q_PROPERTY(QStringList remoteTrackingBranches READ remoteTrackingBranches NOTIFY branchesChanged)
     Q_PROPERTY(bool remoteBranchesLoaded READ remoteBranchesLoaded NOTIFY branchesChanged)
     Q_PROPERTY(QString remoteBranchesRemote READ remoteBranchesRemote NOTIFY branchesChanged)
     Q_PROPERTY(QString pushRemoteUrl READ pushRemoteUrl NOTIFY branchesChanged)
-    Q_PROPERTY(QString detailsText READ detailsText NOTIFY detailsTextChanged)
     Q_PROPERTY(QVariantList changedFiles READ changedFiles NOTIFY detailsTextChanged)
     Q_PROPERTY(QVariantList groupedChanges READ groupedChanges NOTIFY detailsTextChanged)
     Q_PROPERTY(bool detailsCached READ detailsCached NOTIFY detailsTextChanged)
     Q_PROPERTY(QString diffText READ diffText NOTIFY diffTextChanged)
     Q_PROPERTY(QString selectedFile READ selectedFile NOTIFY diffTextChanged)
     Q_PROPERTY(bool selectedFileStaged READ selectedFileStaged NOTIFY diffTextChanged)
-    Q_PROPERTY(QString historyText READ historyText NOTIFY historyTextChanged)
     Q_PROPERTY(QVariantList historyEntries READ historyEntries NOTIFY historyTextChanged)
+    Q_PROPERTY(bool historyCached READ historyCached NOTIFY historyTextChanged)
     Q_PROPERTY(bool historyHasMore READ historyHasMore NOTIFY historyTextChanged)
     Q_PROPERTY(QString revisionDiff READ revisionDiff NOTIFY revisionDiffChanged)
     Q_PROPERTY(QString selectedRevision READ selectedRevision NOTIFY revisionDiffChanged)
@@ -62,6 +60,7 @@ class WorkspaceController final : public QObject
     Q_PROPERTY(QString remote READ remote WRITE setRemote NOTIFY settingsChanged)
     Q_PROPERTY(QString targetBranch READ targetBranch WRITE setTargetBranch NOTIFY settingsChanged)
     Q_PROPERTY(QString topic READ topic WRITE setTopic NOTIFY settingsChanged)
+    Q_PROPERTY(bool requireChangeIdHook READ requireChangeIdHook WRITE setRequireChangeIdHook NOTIFY settingsChanged)
     Q_PROPERTY(QString gerritHost READ gerritHost WRITE setGerritHost NOTIFY settingsChanged)
     Q_PROPERTY(QString gerritUser READ gerritUser WRITE setGerritUser NOTIFY settingsChanged)
     Q_PROPERTY(int gerritPort READ gerritPort WRITE setGerritPort NOTIFY settingsChanged)
@@ -71,6 +70,8 @@ class WorkspaceController final : public QObject
     Q_PROPERTY(bool isBinaryDiff READ isBinaryDiff NOTIFY diffTextChanged)
     Q_PROPERTY(bool hasConflicts READ hasConflicts NOTIFY detailsTextChanged)
     Q_PROPERTY(QString pendingOperation READ pendingOperation NOTIFY detailsTextChanged)
+    Q_PROPERTY(QString pendingCherryPickRevision READ pendingCherryPickRevision NOTIFY detailsTextChanged)
+    Q_PROPERTY(bool canSkipCherryPick READ canSkipCherryPick NOTIFY detailsTextChanged)
     Q_PROPERTY(bool hasPendingOperation READ hasPendingOperation NOTIFY detailsTextChanged)
     Q_PROPERTY(bool ignoreWhitespace READ ignoreWhitespace WRITE setIgnoreWhitespace NOTIFY ignoreWhitespaceChanged)
     Q_PROPERTY(bool hasCommitHook READ hasCommitHook NOTIFY hasCommitHookChanged)
@@ -89,6 +90,7 @@ public:
     void setWorkspacePath(const QString &path);
     QString selectedName() const;
     QString selectedPath() const;
+    QString operationGeneration() const { return QString::number(m_generation); }
     QString selectedBranch() const;
     QStringList availableBranches() const { return m_availableBranches; }
     QStringList remoteBranches() const { return m_remoteBranches; }
@@ -99,18 +101,19 @@ public:
     Q_INVOKABLE void requestRemoteBranches(const QString &remote);
     Q_INVOKABLE void configurePullUpstream(const QString &remote, const QString &branch);
     Q_INVOKABLE void requestLastCommitMessage();
-    QString detailsText() const { return m_detailsText; }
     QVariantList changedFiles() const { return m_changedFiles; }
     bool detailsCached() const { return m_detailsCached; }
     bool hasConflicts() const;
     QString pendingOperation() const;
+    QString pendingCherryPickRevision() const;
+    bool canSkipCherryPick() const;
     bool hasPendingOperation() const { return !pendingOperation().isEmpty(); }
     QVariantList groupedChanges() const { return m_groupedChanges; }
     QString diffText() const { return m_diffText; }
     QString selectedFile() const { return m_selectedFile; }
     bool selectedFileStaged() const { return m_selectedFileStaged; }
-    QString historyText() const { return m_historyText; }
     QVariantList historyEntries() const { return m_historyEntries; }
+    bool historyCached() const { return !m_historyLoaded && !m_historyEntries.isEmpty(); }
     bool historyHasMore() const { return m_historyLoaded && m_historyHasMore; }
     QString revisionDiff() const { return m_revisionDiff; }
     QString selectedRevision() const { return m_selectedRevision; }
@@ -133,6 +136,8 @@ public:
     void setTargetBranch(const QString &value);
     QString topic() const { return m_repositoryConfig.topic; }
     void setTopic(const QString &value);
+    bool requireChangeIdHook() const { return m_repositoryConfig.requireChangeIdHook; }
+    void setRequireChangeIdHook(bool required);
     QString gerritHost() const { return m_repositoryConfig.gerritHost; }
     void setGerritHost(const QString &value);
     QString gerritUser() const { return m_repositoryConfig.gerritUser; }
@@ -154,7 +159,6 @@ public:
     Q_INVOKABLE void selectAll(bool selected);
     Q_INVOKABLE void setActiveRepositoryIgnored(bool ignored);
     Q_INVOKABLE void setRepositoryIgnored(const QString &path, bool ignored);
-    CommitWorkflowService *commitWorkflow() { return &m_commitWorkflow; }
     GerritService *gerrit() { return &m_gerrit; }
     CommitMessageAiService *commitAi() { return &m_commitAi; }
     ProjectManager *projectManager() { return &m_projectManager; }
@@ -165,11 +169,12 @@ public:
     Q_INVOKABLE void unstageFiles(const QStringList &paths);
     Q_INVOKABLE void discardFiles(const QStringList &paths);
     Q_INVOKABLE void commitActive(const QString &message, bool amend, bool stageAll);
-    Q_INVOKABLE void commitAndPushActive(const QString &message, bool amend, bool stageAll);
     Q_INVOKABLE void generateCommitMessage(const QString &existingMessage, int scope,
                                            const QString &commitType, const QString &issueId,
                                            bool manualCompiled = false,
-                                           const QString &compileNote = QString());
+                                           const QString &compileNote = QString(),
+                                           const QString &purpose = QString(),
+                                           const QString &secondaryIssueId = QString());
     Q_INVOKABLE void pushActive();
     Q_INVOKABLE void checkoutBranch(const QString &branch);
     Q_INVOKABLE void checkoutRevision(const QString &revision);
@@ -179,7 +184,7 @@ public:
     Q_INVOKABLE void showFileDiff(const QString &path, bool staged = false);
     Q_INVOKABLE void openFile(const QString &path);
     Q_INVOKABLE int activeProxyIndex() const;
-    Q_INVOKABLE void createBranch(const QString &branch, bool useRepoStart = false);
+    Q_INVOKABLE void createBranch(const QString &branch);
     Q_INVOKABLE void deleteBranch(const QString &branch, bool force = false);
     Q_INVOKABLE void installCommitHook(bool resumePendingCommit = false);
     Q_INVOKABLE void repairLastCommitChangeId();
@@ -206,6 +211,7 @@ public:
     Q_INVOKABLE QString stashSha(int index) const;
     Q_INVOKABLE void markResolved(const QStringList &paths);
     Q_INVOKABLE void continueOperation();
+    Q_INVOKABLE void skipCherryPick(const QString &expectedRevision);
     Q_INVOKABLE void abortOperation();
 
     // Draft persistence
@@ -244,7 +250,7 @@ signals:
     void hasCommitHookChanged();
     void lastGerritReviewUrlChanged();
     void pushStatusChanged();
-    void operationFailed(const QString &title, const QString &message);
+    void operationError(const QVariantMap &error);
     void operationFinished(const QString &message);
     void lastCommitMessageReady(const QString &workspacePath, const QString &repositoryPath, const QString &message);
     void commitSucceeded(const QString &workspacePath, const QString &repositoryPath,
@@ -255,12 +261,19 @@ private slots:
     void onGitOutputReceived(const QByteArray &output, const QByteArray &errors);
 
 private:
+    enum class ErrorType { General, Ai, Upstream, Conflict, Hook, ChangeId };
+    void reportError(const QString &title, const QString &message, ErrorType type = ErrorType::General,
+                     const QStringList &actions = {}, const GitCommand *command = nullptr);
+    void applyRepositoryPaths(QStringList paths);
+    void discoverManifestRepository(const QStringList &paths);
     void loadSettings();
     void loadRepositorySettings();
     void saveSettings() const;
     void loadRepositoryCache();
     void restoreRepositoryCache(const QString &repositoryPath);
-    void saveRepositoryCache() const;
+    void saveFileCache(int index, const QVariantList &files);
+    void saveBranchCache();
+    void saveHistoryCache();
 
     void enqueue(GitCommand command);
     void enqueueGit(int index, const QStringList &arguments, const QString &title,
@@ -270,12 +283,13 @@ private:
     void appendConsole(const QString &text);
     void appendConsoleProgress(const QString &progress);
     void setPushStatus(int state, const QString &text);
+    void setLastGerritReviewUrl(const QString &url);
     QString absoluteRepositoryPath(int index) const;
     QStringList actionPaths(int scope = -1) const;
     void updateCommitHookStatus();
-    bool checkHasCommitHook(const QString &repoPath) const;
+    void setCommitHookStatus(bool installed);
     void resumePendingCommitAfterHook();
-    void applyStatus(int index, const GitStatusParser::Snapshot &snapshot);
+    void applyStatus(int index, const GitStatusParser::Snapshot &snapshot, bool persist = true);
     bool isOwnRepositoryPath(int index, const QString &path) const;
     QVariantList ownRepositoryFiles(int index, const QVariantList &files) const;
     void rebuildGroupedChanges();
@@ -283,6 +297,8 @@ private:
     bool prepareScopedStage(GitCommand &command);
     void enqueueRepositoryRefresh(int index, bool includeBranches);
     void refreshSelectedFile();
+    void setDiffText(const QString &text);
+    const DiffIndex &currentDiffIndex() const;
     void executeDiscard(int repositoryIndex, const QStringList &paths, const QString &statusOutput);
     void executeStashAction(const QString &action, int index, const QString &expectedSha, const QString &title);
 
@@ -292,7 +308,6 @@ private:
     RepositoryWatcher m_repositoryWatcher;
     WorkspaceSettings::RepositoryConfig m_repositoryConfig;
     GerritService m_gerrit;
-    CommitWorkflowService m_commitWorkflow;
     CommitMessageAiService m_commitAi;
     QString m_workspacePath;
     ProjectManager m_projectManager;
@@ -308,20 +323,22 @@ private:
     QString m_aiExistingMessage;
     QString m_aiCommitType;
     QString m_aiIssueId;
+    QString m_aiSecondaryIssueId;
     bool m_aiManualCompiled = false;
     QString m_aiCompileNote;
+    QString m_aiPurpose;
     QStringList m_aiChangedFiles;
     QStringList m_aiUntrackedFiles;
     quint64 m_revisionRequest = 0;
     quint64 m_revisionFilesRequest = 0;
-    QString m_detailsText;
     QVariantList m_changedFiles;
     QVariantList m_groupedChanges;
     bool m_detailsCached = false;
     QString m_diffText;
+    mutable DiffIndex m_diffIndex;
+    mutable bool m_diffIndexValid = false;
     QString m_selectedFile;
     bool m_selectedFileStaged = false;
-    QString m_historyText;
     QVariantList m_historyEntries;
     bool m_historyRequested = false;
     bool m_historyPending = false;
@@ -354,11 +371,6 @@ private:
     bool m_ignoreWhitespace = false;
     bool m_hasCommitHook = true;
     QString m_repairChangeIdRevision;
-    QString m_autoPushWorkspace;
-    QString m_autoPushRepository;
-    QString m_autoPushRemote;
-    QString m_autoPushTargetBranch;
-    QString m_autoPushTopic;
     struct PendingCommit {
         bool valid = false;
         QString workspacePath;
@@ -366,7 +378,6 @@ private:
         QString message;
         bool amend = false;
         bool stageAll = false;
-        bool pushAfterCommit = false;
     };
     PendingCommit m_pendingCommit;
     bool m_resumePendingCommit = false;

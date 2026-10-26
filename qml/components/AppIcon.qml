@@ -2,8 +2,8 @@ import QtQuick
 
 Item {
     id: root
-    implicitWidth: 38
-    implicitHeight: 38
+    implicitWidth: 34
+    implicitHeight: 34
     Accessible.name: "GerritPilot"
 
     Canvas {
@@ -14,8 +14,8 @@ Item {
             ctx.scale(width / 64, height / 64)
             ctx.clearRect(0, 0, 64, 64)
             const fill = ctx.createLinearGradient(0, 0, 64, 64)
-            fill.addColorStop(0, "#42B5FF")
-            fill.addColorStop(1, "#0A84FF")
+            fill.addColorStop(0, "#329EFF")
+            fill.addColorStop(1, "#0876E8")
             ctx.fillStyle = fill
             ctx.beginPath()
             ctx.moveTo(17, 1)

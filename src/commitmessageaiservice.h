@@ -17,6 +17,8 @@ class CommitMessageAiService final : public QObject
     Q_PROPERTY(QString apiEndpoint READ apiEndpoint WRITE setApiEndpoint NOTIFY apiEndpointChanged)
     Q_PROPERTY(QString apiKey READ apiKey WRITE setApiKey NOTIFY apiKeyChanged)
     Q_PROPERTY(QString modelName READ modelName WRITE setModelName NOTIFY modelNameChanged)
+    Q_PROPERTY(QString issuePrefix READ issuePrefix WRITE setIssuePrefix NOTIFY issuePrefixChanged)
+    Q_PROPERTY(bool rememberApiKey READ rememberApiKey WRITE setRememberApiKey NOTIFY rememberApiKeyChanged)
     Q_PROPERTY(bool testBusy READ testBusy NOTIFY testBusyChanged)
     Q_PROPERTY(QString testResult READ testResult NOTIFY testResultChanged)
 public:
@@ -35,6 +37,10 @@ public:
 
     QString modelName() const { return m_modelName; }
     void setModelName(const QString &model);
+    QString issuePrefix() const { return m_issuePrefix; }
+    void setIssuePrefix(const QString &prefix);
+    bool rememberApiKey() const { return m_rememberApiKey; }
+    void setRememberApiKey(bool remember);
     bool testBusy() const { return m_testReply != nullptr; }
     QString testResult() const { return m_testResult; }
     bool configured() const;
@@ -46,7 +52,9 @@ public:
                               const QString &diffText, const QStringList &changedFiles,
                               const QString &existingMessage, const QString &commitType,
                               const QString &issueId, bool wholeRepository,
-                              bool manualCompiled = false, const QString &compileNote = QString());
+                              bool manualCompiled = false, const QString &compileNote = QString(),
+                              const QString &purpose = QString(),
+                              const QString &secondaryIssueId = QString());
     Q_INVOKABLE void cancel();
     Q_INVOKABLE void testConnection();
 
@@ -57,7 +65,9 @@ public:
                                         const QString &commitType,
                                         const QString &issueId,
                                         bool manualCompiled = false,
-                                        const QString &compileNote = QString());
+                                        const QString &compileNote = QString(),
+                                        const QString &issuePrefix = QString(),
+                                        const QString &secondaryIssueId = QString());
 
 signals:
     void busyChanged(bool busy);
@@ -66,6 +76,8 @@ signals:
     void apiEndpointChanged();
     void apiKeyChanged();
     void modelNameChanged();
+    void issuePrefixChanged();
+    void rememberApiKeyChanged();
     void testBusyChanged();
     void testResultChanged();
 
@@ -87,6 +99,8 @@ private:
     QString m_apiEndpoint;
     QString m_apiKey;
     QString m_modelName;
+    QString m_issuePrefix;
+    bool m_rememberApiKey = false;
     QString m_testResult;
 
     // Context saved for reply processing
@@ -94,6 +108,8 @@ private:
     QString m_pendingExistingMsg;
     QString m_pendingCommitType;
     QString m_pendingIssueId;
+    QString m_pendingIssuePrefix;
     bool m_pendingManualCompiled = false;
     QString m_pendingCompileNote;
+    QString m_pendingSecondaryIssueId;
 };

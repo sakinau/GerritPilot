@@ -9,23 +9,20 @@
 class GerritService final : public QObject
 {
     Q_OBJECT
-    Q_PROPERTY(QString lastReviewUrl READ lastReviewUrl NOTIFY lastReviewUrlChanged)
 public:
     explicit GerritService(QObject *parent = nullptr);
 
-    QString lastReviewUrl() const { return m_lastReviewUrl; }
-    void setLastReviewUrl(const QString &url);
 
     // Commit Hook Management
-    static bool checkHasCommitHook(const QString &repoAbsPath);
-    static QString effectiveHookPath(const QString &repoAbsPath);
+    GitCommand createQueryHookPathCommand(int repoIndex, const QString &repoAbsPath,
+                                         const QString &repoRelPath, GitCommandKind kind) const;
     static bool hookSourceFromRemoteUrl(const QString &url, QString *source,
                                         QString *port, QString *error);
     GitCommand createQueryHookRemoteCommand(int repoIndex, const QString &repoAbsPath,
                                              const QString &repoRelPath,
                                              const QString &remote) const;
     GitCommand createInstallHookCommand(const GitCommand &completedQueryCommand,
-                                        const QString &hookPath) const;
+                                        const QString &hookPath, const QString &temporaryPath) const;
     static void finalizeHookPermissions(const QString &hookPath);
 
     // Remote Branches & Push target
@@ -48,10 +45,4 @@ public:
                                      const QString &host,
                                      int port = 29418);
 
-signals:
-    void lastReviewUrlChanged(const QString &url);
-    void hookStatusChanged(bool installed);
-
-private:
-    QString m_lastReviewUrl;
 };
