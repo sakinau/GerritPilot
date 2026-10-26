@@ -5,6 +5,8 @@ import GerritPilot
 Dialog {
     id: root
     property real preferredWidth: 500
+    // Renders the accept button in red for irreversible actions.
+    property bool destructive: false
     parent: Overlay.overlay
     width: Math.min(preferredWidth, Math.max(0, parent ? parent.width - 32 : preferredWidth))
     contentWidth: Math.max(0, width - leftPadding - rightPadding)
@@ -14,21 +16,21 @@ Dialog {
     y: parent ? Math.round((parent.height - height) / 2) : 0
     modal: true
     closePolicy: Popup.CloseOnEscape
-    padding: 20
+    padding: 22
+    topPadding: 12
     spacing: 16
     font.pixelSize: Theme.fontBody
-    background: Rectangle {
-        color: Theme.surfaceStrong
+    background: FloatingSurface {
         radius: Theme.radiusXLarge
-        border.color: Theme.separator
+        elevation: 10
     }
     header: Label {
         text: root.title
         visible: text.length > 0
-        leftPadding: 20
-        rightPadding: 20
+        leftPadding: 22
+        rightPadding: 22
         topPadding: 20
-        bottomPadding: 4
+        bottomPadding: 2
         color: Theme.text
         font.pixelSize: Theme.fontHeading
         font.weight: Font.DemiBold
@@ -38,13 +40,24 @@ Dialog {
         standardButtons: root.standardButtons
         visible: count > 0
         alignment: Qt.AlignRight
+        // Cancel on the left, the affirmative action on the right (Apple HIG).
+        buttonLayout: DialogButtonBox.MacLayout
         spacing: 8
-        leftPadding: 20
-        rightPadding: 20
-        topPadding: 8
+        leftPadding: 22
+        rightPadding: 22
+        topPadding: 6
         bottomPadding: 20
         background: Item { }
-        delegate: PrimaryButton { secondary: true }
+        delegate: PrimaryButton {
+            kind: DialogButtonBox.buttonRole === DialogButtonBox.AcceptRole
+                  || DialogButtonBox.buttonRole === DialogButtonBox.YesRole
+                ? (root.destructive ? "danger" : "filled") : "gray"
+        }
     }
-    Overlay.modal: Rectangle { color: "#33000000" }
+    enter: Transition {
+        NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.animationFast }
+        NumberAnimation { property: "scale"; from: 0.96; to: 1; duration: Theme.animationNormal; easing.type: Easing.OutCubic }
+    }
+    // No exit transition: a fading modal scrim would swallow the next click.
+    Overlay.modal: Rectangle { color: Theme.scrim }
 }

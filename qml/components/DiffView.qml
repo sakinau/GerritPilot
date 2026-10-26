@@ -40,6 +40,7 @@ Item {
         contentItem: Label {
             text: "将一次显示 " + root.totalLineCount + " 行，可能占用较多内存并造成卡顿。\n取消后仍可通过分页、搜索查看全部改动。"
             wrapMode: Text.Wrap
+            lineHeight: 1.15
             font.pixelSize: Theme.fontBody
             color: Theme.text
         }
@@ -147,7 +148,7 @@ Item {
             if (pos > lastPos) {
                 result += escaped(text.substring(lastPos, pos))
             }
-            result += "<span style='background-color:#FFEBAA;color:#1C1C1E;font-weight:bold'>"
+            result += "<span style='background-color:" + Theme.diffSearchHighlight + ";color:" + Theme.diffContextText + ";font-weight:bold'>"
                     + escaped(text.substring(pos, pos + query.length))
                     + "</span>"
             lastPos = pos + query.length
@@ -168,39 +169,31 @@ Item {
         const isActiveHunk = root.hunkTotal > 0 && hunkIdx === root.currentHunkIndex && hunkIdx >= 0
 
         if (!row) {
-            return isActiveHunk ? "<span style='background-color:#F8FAFC'> </span>" : " "
+            return isActiveHunk ? "<span style='background-color:" + Theme.diffContextActive + "'> </span>" : " "
         }
 
-        let color = "#3A3A3C"
+        let color = Theme.diffContextText
         let background = "transparent"
         let prefix = " "
         let isHunkHeader = false
 
         if (row.kind === "add") {
-            color = isActiveHunk ? "#0B6634" : "#187A43"
-            background = isActiveHunk ? "#D2F4E0" : "#E5F7ED"
+            color = Theme.diffAddText
+            background = isActiveHunk ? Theme.diffAddBackgroundActive : Theme.diffAddBackground
             prefix = "+"
-        } else if (row.kind === "remove") {
-            color = isActiveHunk ? "#AB231C" : "#C4322A"
-            background = isActiveHunk ? "#FFD5D1" : "#FFE8E6"
-            prefix = "−"
+        } else if (row.kind === "remove" || row.kind === "marker") {
+            color = Theme.diffRemoveText
+            background = isActiveHunk ? Theme.diffRemoveBackgroundActive : Theme.diffRemoveBackground
+            prefix = row.kind === "remove" ? "−" : " "
         } else if (row.kind === "hunk") {
             isHunkHeader = true
-            color = isActiveHunk ? "#FFFFFF" : "#0868C8"
-            background = isActiveHunk ? "#0868C8" : "#E3F1FF"
+            color = isActiveHunk ? "#FFFFFF" : Theme.diffHunkText
+            background = isActiveHunk ? Theme.diffHunkActiveBackground : Theme.diffHunkBackground
             prefix = "@"
-        } else if (row.kind === "marker") {
-            color = isActiveHunk ? "#AB231C" : "#C4322A"
-            background = isActiveHunk ? "#FFD5D1" : "#FFE8E6"
-            prefix = " "
         } else if (row.kind === "context") {
-            color = "#1C1C1E"
-            background = isActiveHunk ? "#F2F5F8" : "transparent"
-            prefix = " "
+            background = isActiveHunk ? Theme.diffContextActive : "transparent"
         } else {
-            color = "#6E6E73"
-            background = "transparent"
-            prefix = " "
+            color = Theme.diffMetaText
         }
 
         const numbers = unified ? paddedLine(row.oldNumber) + " " + paddedLine(row.newNumber)
@@ -216,8 +209,8 @@ Item {
             textFormatted = hunkBadge + textFormatted
         }
 
-        const numColor = isHunkHeader && isActiveHunk ? "#D0E8FF" : "#8E8E93"
-        const numBg = isHunkHeader && isActiveHunk ? "#0868C8" : (isActiveHunk && background !== "transparent" ? background : "transparent")
+        const numColor = isHunkHeader && isActiveHunk ? Theme.diffHunkActiveNumber : Theme.diffLineNumber
+        const numBg = isHunkHeader && isActiveHunk ? Theme.diffHunkActiveBackground : (isActiveHunk && background !== "transparent" ? background : "transparent")
 
         return "<span style='color:" + numColor + ";background-color:" + numBg + "'>" + numbers
              + "</span><span style='color:" + color + ";background-color:" + background + (isHunkHeader && isActiveHunk ? ";font-weight:bold" : "") + "'> "
@@ -227,7 +220,7 @@ Item {
     function renderedDiff(oldSide, unified, query, fontSize) {
         const rows = unified ? root.displayParsedRows : root.displayPairedRows
         if (!rows || !rows.length)
-            return "<span style='color:#8E8E93'>当前没有可显示的代码 Diff</span>"
+            return "<span style='color:" + Theme.diffLineNumber + "'>当前没有可显示的代码 Diff</span>"
         const effectiveQuery = (query !== undefined ? query : root.searchQuery)
         const size = (fontSize || root.codeFontSize || 11)
         // Each display row must be a separate QTextDocument block. Thousands
@@ -397,188 +390,124 @@ Item {
                 width: parent.width
                 spacing: 8
 
-                // Search Bar
-                Rectangle {
-                    width: Math.min(260, toolbarRow.width)
+                SearchField {
+                    id: searchInput
+                    width: Math.min(280, toolbarRow.width)
                     height: Theme.controlHeight
-                    radius: 7
-                    color: Theme.surfaceMuted
-                    border.color: searchInput.activeFocus ? Theme.accent : "transparent"
-
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: 8
-                        anchors.rightMargin: 6
-                        spacing: 4
-
-                        Text {
-                            text: "🔍"
-                            font.pixelSize: Theme.fontSecondary
-                            color: Theme.tertiaryText
+                    placeholderText: "搜索差异"
+                    onTextChanged: {
+                        if (text.trim() === "") {
+                            searchDebounceTimer.stop()
+                            root.searchQuery = ""
+                            root.currentMatchIndex = 0
+                        } else {
+                            searchDebounceTimer.restart()
                         }
-
-                        TextInput {
-                            id: searchInput
-                            Layout.fillWidth: true
-                            font.pixelSize: Theme.fontSecondary
-                            color: Theme.text
-                            clip: true
-                            selectByMouse: true
-                            onTextChanged: {
-                                if (text.trim() === "") {
-                                    searchDebounceTimer.stop()
-                                    root.searchQuery = ""
-                                    root.currentMatchIndex = 0
-                                } else {
-                                    searchDebounceTimer.restart()
-                                }
-                            }
-                            onAccepted: {
-                                searchDebounceTimer.stop()
-                                if (root.searchQuery === text.trim() && root.searchMatchCount > 0) {
-                                    root.nextSearchMatch()
-                                } else {
-                                    root.searchQuery = text.trim()
-                                    root.currentMatchIndex = 0
-                                    if (root.searchQuery.length > 0)
-                                        root.scrollToSearchMatch(0)
-                                }
-                            }
-
-                            Text {
-                                anchors.fill: parent
-                                text: "搜索差异…"
-                                color: Theme.placeholder
-                                font.pixelSize: Theme.fontSecondary
-                                visible: !searchInput.text.length && !searchInput.activeFocus
-                                verticalAlignment: Text.AlignVCenter
-                            }
+                    }
+                    onAccepted: {
+                        searchDebounceTimer.stop()
+                        if (root.searchQuery === text.trim() && root.searchMatchCount > 0) {
+                            root.nextSearchMatch()
+                        } else {
+                            root.searchQuery = text.trim()
+                            root.currentMatchIndex = 0
+                            if (root.searchQuery.length > 0)
+                                root.scrollToSearchMatch(0)
                         }
+                    }
 
-                        Text {
-                            text: root.searchQuery.trim().length > 0
-                                ? (root.searchMatchCount > 0 ? (root.currentMatchIndex + 1) + "/" + root.searchMatchCount : "无匹配")
-                                : ""
-                            color: root.searchMatchCount > 0 ? Theme.accent : Theme.red
-                            font.pixelSize: Theme.fontSecondary
-                            visible: root.searchQuery.trim().length > 0
-                        }
-
-                        ToolButton {
-                            visible: root.searchMatchCount > 1
-                            text: "▲"
-                            implicitWidth: 18
-                            implicitHeight: 22
-                            focusPolicy: Qt.NoFocus
-                            onClicked: root.prevSearchMatch()
-                        }
-
-                        ToolButton {
-                            visible: root.searchMatchCount > 1
-                            text: "▼"
-                            implicitWidth: 18
-                            implicitHeight: 22
-                            focusPolicy: Qt.NoFocus
-                            onClicked: root.nextSearchMatch()
-                        }
-
-                        IconButton {
-                            visible: searchInput.text.length > 0
-                            glyph: "✕"
-                            toolTip: "清除搜索"
-                            onClicked: {
-                                searchInput.text = ""
-                                searchDebounceTimer.stop()
-                                root.searchQuery = ""
-                                root.currentMatchIndex = 0
-                            }
-                        }
+                    Text {
+                        text: root.searchMatchCount > 0 ? (root.currentMatchIndex + 1) + "/" + root.searchMatchCount : "无匹配"
+                        color: root.searchMatchCount > 0 ? Theme.secondaryText : Theme.redText
+                        font.pixelSize: Theme.fontCaption
+                        font.weight: Font.Medium
+                        visible: root.searchQuery.trim().length > 0
+                        Layout.rightMargin: 2
+                    }
+                    IconButton {
+                        visible: root.searchMatchCount > 1
+                        iconName: "chevron-up"
+                        toolTip: "上一个匹配"
+                        implicitWidth: 22
+                        implicitHeight: 22
+                        focusPolicy: Qt.NoFocus
+                        onClicked: root.prevSearchMatch()
+                    }
+                    IconButton {
+                        visible: root.searchMatchCount > 1
+                        iconName: "chevron-down"
+                        toolTip: "下一个匹配（Enter）"
+                        implicitWidth: 22
+                        implicitHeight: 22
+                        focusPolicy: Qt.NoFocus
+                        onClicked: root.nextSearchMatch()
                     }
                 }
 
                 // Each operation participates in wrapping, even at minimum pane width.
                 Flow {
-                    width: toolbarRow.width
+                    id: hunkActions
+                    // Natural single-row width, so it can share the row with search
+                    // and only wraps when the pane is narrow.
+                    readonly property real naturalWidth: {
+                        let total = 0
+                        let count = 0
+                        for (let i = 0; i < children.length; ++i) {
+                            if (!children[i].visible) continue
+                            total += children[i].width
+                            ++count
+                        }
+                        return total + Math.max(0, count - 1) * spacing
+                    }
+                    width: Math.min(toolbarRow.width, naturalWidth)
                     visible: root.hunkTotal > 0
                     spacing: 6
 
                     // Flow children use actual dimensions, not Layout attached hints.
 
-                    ToolButton {
-                        id: prevHunkBtn
-                        text: "◀"
-                        implicitWidth: 26
-                        implicitHeight: Theme.controlHeight
-                        padding: 0
-                        topInset: 0
-                        bottomInset: 0
-                        leftInset: 0
-                        rightInset: 0
-                        hoverEnabled: true
-                        enabled: root.currentHunkIndex > 0
-                        background: Rectangle {
-                            radius: 6
-                            color: prevHunkBtn.down ? "#DEE0E8" : prevHunkBtn.hovered ? Theme.surfaceMuted : "transparent"
-                        }
-                        contentItem: Text {
-                            text: prevHunkBtn.text
-                            color: prevHunkBtn.enabled ? Theme.text : Theme.tertiaryText
-                            font.pixelSize: Theme.fontSecondary
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                        }
-                        MouseArea {
-                            anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
-                            acceptedButtons: Qt.NoButton
-                        }
-                        onClicked: root.currentHunkIndex = Math.max(0, root.currentHunkIndex - 1)
-                    }
-
-                    Text {
-                        text: "块 " + (root.currentHunkIndex + 1) + " / " + root.hunkTotal
+                    Rectangle {
+                        width: hunkNav.implicitWidth + 4
                         height: Theme.controlHeight
-                        verticalAlignment: Text.AlignVCenter
-                        font.pixelSize: Theme.fontSecondary
-                        color: Theme.secondaryText
-                    }
-
-                    ToolButton {
-                        id: nextHunkBtn
-                        text: "▶"
-                        implicitWidth: 26
-                        implicitHeight: Theme.controlHeight
-                        padding: 0
-                        topInset: 0
-                        bottomInset: 0
-                        leftInset: 0
-                        rightInset: 0
-                        hoverEnabled: true
-                        enabled: root.currentHunkIndex < root.hunkTotal - 1
-                        background: Rectangle {
-                            radius: 6
-                            color: nextHunkBtn.down ? "#DEE0E8" : nextHunkBtn.hovered ? Theme.surfaceMuted : "transparent"
+                        radius: Theme.controlRadius
+                        color: Theme.fillQuaternary
+                        Row {
+                            id: hunkNav
+                            anchors.centerIn: parent
+                            spacing: 0
+                            IconButton {
+                                iconName: "chevron-left"
+                                toolTip: "上一个代码块"
+                                implicitWidth: 26
+                                implicitHeight: 26
+                                enabled: root.currentHunkIndex > 0
+                                onClicked: root.currentHunkIndex = Math.max(0, root.currentHunkIndex - 1)
+                            }
+                            Text {
+                                text: "块 " + (root.currentHunkIndex + 1) + " / " + root.hunkTotal
+                                height: 26
+                                leftPadding: 4
+                                rightPadding: 4
+                                verticalAlignment: Text.AlignVCenter
+                                font.pixelSize: Theme.fontSecondary
+                                font.weight: Font.Medium
+                                color: Theme.secondaryText
+                            }
+                            IconButton {
+                                iconName: "chevron-right"
+                                toolTip: "下一个代码块"
+                                implicitWidth: 26
+                                implicitHeight: 26
+                                enabled: root.currentHunkIndex < root.hunkTotal - 1
+                                onClicked: root.currentHunkIndex = Math.min(root.hunkTotal - 1, root.currentHunkIndex + 1)
+                            }
                         }
-                        contentItem: Text {
-                            text: nextHunkBtn.text
-                            color: nextHunkBtn.enabled ? Theme.text : Theme.tertiaryText
-                            font.pixelSize: Theme.fontSecondary
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                        }
-                        MouseArea {
-                            anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
-                            acceptedButtons: Qt.NoButton
-                        }
-                        onClicked: root.currentHunkIndex = Math.min(root.hunkTotal - 1, root.currentHunkIndex + 1)
                     }
 
                     FileActionButton {
                         implicitWidth: Theme.controlHeight
                         implicitHeight: Theme.controlHeight
                         visible: root.workspace && !root.workspace.selectedFileStaged && root.isWorktreeDiff
-                        text: "＋"
+                        iconName: "plus"
                         toolTip: root.hunkTotal > 1 ? "暂存此块" : "暂存文件"
                         enabled: root.workspace && !root.workspace.busy
                         onClicked: {
@@ -595,7 +524,7 @@ Item {
                         implicitHeight: Theme.controlHeight
                         visible: root.workspace && !root.workspace.selectedFileStaged && root.isWorktreeDiff && root.hunkTotal > 1
                         objectName: "stageWholeFileButton"
-                        text: "⊞"
+                        iconName: "plus-square"
                         toolTip: "暂存整个文件"
 
                         enabled: root.workspace && !root.workspace.busy
@@ -606,7 +535,7 @@ Item {
                         implicitWidth: Theme.controlHeight
                         implicitHeight: Theme.controlHeight
                         visible: root.workspace && root.workspace.selectedFileStaged && root.isWorktreeDiff
-                        text: "−"
+                        iconName: "minus"
                         toolTip: root.hunkTotal > 1 ? "取消暂存此块" : "取消暂存文件"
                         enabled: root.workspace && !root.workspace.busy
                         onClicked: {
@@ -622,7 +551,7 @@ Item {
                         implicitWidth: Theme.controlHeight
                         implicitHeight: Theme.controlHeight
                         visible: root.workspace && root.workspace.selectedFileStaged && root.isWorktreeDiff && root.hunkTotal > 1
-                        text: "⊟"
+                        iconName: "minus-square"
                         toolTip: "取消暂存整个文件"
 
                         enabled: root.workspace && !root.workspace.busy
@@ -633,7 +562,8 @@ Item {
                         implicitWidth: Theme.controlHeight
                         implicitHeight: Theme.controlHeight
                         visible: root.workspace && !root.workspace.selectedFileStaged && root.isWorktreeDiff
-                        text: "↶"
+                        iconName: "undo"
+                        destructive: true
                         toolTip: root.hunkTotal > 1 ? "丢弃此块" : "丢弃改动"
 
 
@@ -651,205 +581,90 @@ Item {
             }
         }
 
-        // Large Diff Notification Banner (Windowed mode)
-        Rectangle {
+        // Large diff: windowed paging
+        Banner {
             objectName: "largeDiffBanner"
             visible: root.isTruncated
             Layout.fillWidth: true
-            Layout.preferredHeight: pageControls.implicitHeight + 16
-            radius: 8
-            color: "#FFF9E6"
-            border.color: "#FFE082"
-            clip: true
+            tone: "warning"
+            iconName: "file-diff"
+            actionsRightAligned: false
+            title: "当前显示 " + (root.windowStart + 1) + "–" + root.windowEnd + " / " + root.totalLineCount + " 行"
+            message: "改动较大，已分页渲染；可翻页或搜索查看全部内容"
 
-            ColumnLayout {
-                id: pageControls
-                x: 12
-                y: 8
-                width: parent.width - 24
-                spacing: 8
-
-                Text {
-                    text: "当前显示 " + (root.windowStart + 1) + "–" + root.windowEnd + " / " + root.totalLineCount + " 行，后续内容可翻页查看"
-                    color: "#7A5E0B"
-                    font.pixelSize: Theme.fontSecondary
-                    Layout.fillWidth: true
-                    wrapMode: Text.Wrap
-                }
-
-                Flow {
-                    Layout.fillWidth: true
-                    spacing: 8
-
-                ToolButton {
-                    id: prevPageBtn
-                    objectName: "previousDiffPageButton"
-                    text: "◀ 上一页"
-                    implicitHeight: 28
-                    implicitWidth: prevPageText.implicitWidth + 16
-                    padding: 0
-                    topInset: 0
-                    bottomInset: 0
-                    leftInset: 0
-                    rightInset: 0
-                    hoverEnabled: true
-                    enabled: root.windowStart > 0
-                    focusPolicy: Qt.NoFocus
-                    background: Rectangle {
-                        radius: 6
-                        color: prevPageBtn.down ? "#FFE082" : prevPageBtn.hovered ? "#FFF0B8" : "transparent"
-                    }
-                    contentItem: Text {
-                        id: prevPageText
-                        text: prevPageBtn.text
-                        color: prevPageBtn.enabled ? "#7A5E0B" : "#BBA86B"
-                        font.pixelSize: Theme.fontSecondary
-                        font.weight: Font.DemiBold
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                    }
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        acceptedButtons: Qt.NoButton
-                    }
-                    onClicked: root.prevWindowPage()
-                }
-
-                ToolButton {
-                    id: nextPageBtn
-                    objectName: "nextDiffPageButton"
-                    text: "下一页 ▶"
-                    implicitHeight: 28
-                    implicitWidth: nextPageText.implicitWidth + 16
-                    padding: 0
-                    topInset: 0
-                    bottomInset: 0
-                    leftInset: 0
-                    rightInset: 0
-                    hoverEnabled: true
-                    enabled: root.windowEnd < root.totalLineCount
-                    focusPolicy: Qt.NoFocus
-                    background: Rectangle {
-                        radius: 6
-                        color: nextPageBtn.down ? "#FFE082" : nextPageBtn.hovered ? "#FFF0B8" : "transparent"
-                    }
-                    contentItem: Text {
-                        id: nextPageText
-                        text: nextPageBtn.text
-                        color: nextPageBtn.enabled ? "#7A5E0B" : "#BBA86B"
-                        font.pixelSize: Theme.fontSecondary
-                        font.weight: Font.DemiBold
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                    }
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        acceptedButtons: Qt.NoButton
-                    }
-                    onClicked: root.nextWindowPage()
-                }
-
-                PrimaryButton {
-                    objectName: "showAllDiffButton"
-                    text: "加载全部"
-                    onClicked: root.requestFullDiff()
-                }
-
-                PrimaryButton {
-                    visible: root.workspace && root.workspace.selectedFile && root.workspace.selectedFile.length > 0
-                    text: "系统程序打开"
-                    secondary: true
-                    onClicked: root.workspace.openFile(root.workspace.selectedFile)
-                }
-                }
+            PrimaryButton {
+                objectName: "previousDiffPageButton"
+                kind: "plain"
+                compact: true
+                iconName: "chevron-left"
+                text: "上一页"
+                focusPolicy: Qt.NoFocus
+                enabled: root.windowStart > 0
+                onClicked: root.prevWindowPage()
+            }
+            PrimaryButton {
+                objectName: "nextDiffPageButton"
+                kind: "plain"
+                compact: true
+                text: "下一页"
+                iconName: "chevron-right"
+                focusPolicy: Qt.NoFocus
+                enabled: root.windowEnd < root.totalLineCount
+                onClicked: root.nextWindowPage()
+            }
+            PrimaryButton {
+                objectName: "showAllDiffButton"
+                kind: "tinted"
+                compact: true
+                text: "加载全部"
+                onClicked: root.requestFullDiff()
+            }
+            PrimaryButton {
+                visible: root.workspace && root.workspace.selectedFile && root.workspace.selectedFile.length > 0
+                kind: "plain"
+                compact: true
+                iconName: "arrow-up-right"
+                text: "系统程序打开"
+                onClicked: root.workspace.openFile(root.workspace.selectedFile)
             }
         }
 
-        // Full Diff Loaded Banner (when user clicked "加载全部")
-        Rectangle {
+        // Full diff loaded after confirmation
+        Banner {
             visible: root.totalLineCount > root.maxRenderedLines && root.showAllDiff
             Layout.fillWidth: true
-            Layout.preferredHeight: Math.max(34, Theme.controlHeight + 16)
-            radius: 8
-            color: "#EBF3FB"
-            border.color: "#BBD7F0"
-            clip: true
-
-            RowLayout {
-                anchors.fill: parent
-                anchors.leftMargin: 12
-                anchors.rightMargin: 12
-                spacing: 8
-
-                Text {
-                    text: "ℹ️ 已加载完整差异（共 " + root.totalLineCount + " 行）"
-                    color: "#185A9D"
-                    font.pixelSize: Theme.fontSecondary
-                    Layout.fillWidth: true
-                    elide: Text.ElideRight
-                }
-
-                PrimaryButton {
-                    text: "恢复窗口化"
-                    secondary: true
-                    onClicked: {
-                        root.windowStart = 0
-                        root.showAllDiff = false
-                        root.ensureHunkInWindow(root.currentHunkIndex)
-                        Qt.callLater(root.scrollToCurrentHunk)
-                    }
+            tone: "info"
+            message: "已加载完整差异（共 " + root.totalLineCount + " 行）"
+            PrimaryButton {
+                text: "恢复分页"
+                kind: "plain"
+                compact: true
+                onClicked: {
+                    root.windowStart = 0
+                    root.showAllDiff = false
+                    root.ensureHunkInWindow(root.currentHunkIndex)
+                    Qt.callLater(root.scrollToCurrentHunk)
                 }
             }
         }
 
-        // Binary File Notice Card
-        Rectangle {
+        // Binary file notice
+        Banner {
             visible: root.isBinary
             Layout.fillWidth: true
-            Layout.preferredHeight: 70
-            radius: 9
-            color: Theme.surfaceMuted
-            border.color: Theme.separatorSoft
-            clip: true
-
-            RowLayout {
-                anchors.fill: parent
-                anchors.margins: 16
-                spacing: 12
-
-                Text {
-                    text: "📦"
-                    font.pixelSize: 24
-                }
-
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: 2
-
-                    Text {
-                        text: "二进制文件，无法显示文本差异"
-                        color: Theme.text
-                        font.pixelSize: Theme.fontBody
-                        font.weight: Font.DemiBold
-                    }
-
-                    Text {
-                        text: root.workspace && root.workspace.selectedFile
-                            ? root.workspace.selectedFile
-                            : "此文件为二进制文件或不可显示的格式"
-                        color: Theme.secondaryText
-                        font.pixelSize: Theme.fontSecondary
-                        elide: Text.ElideMiddle
-                    }
-                }
-
-                PrimaryButton {
-                    visible: root.workspace && root.workspace.selectedFile.length > 0
-                    text: "在系统默认程序中打开"
-                    onClicked: root.workspace.openFile(root.workspace.selectedFile)
-                }
+            tone: "neutral"
+            iconName: "package"
+            title: "二进制文件，无法显示文本差异"
+            message: root.workspace && root.workspace.selectedFile
+                ? root.workspace.selectedFile
+                : "此文件为二进制文件或不可显示的格式"
+            PrimaryButton {
+                visible: root.workspace && root.workspace.selectedFile.length > 0
+                kind: "gray"
+                compact: true
+                iconName: "arrow-up-right"
+                text: "在系统默认程序中打开"
+                onClicked: root.workspace.openFile(root.workspace.selectedFile)
             }
         }
 
@@ -1014,7 +829,8 @@ Item {
     AppDialog {
         id: discardHunkDialog
         title: "丢弃改动块"
-        preferredWidth: 380
+        preferredWidth: 400
+        destructive: true
         standardButtons: Dialog.Cancel | Dialog.Ok
         onAccepted: {
             if (root.workspace)
@@ -1022,7 +838,7 @@ Item {
         }
         contentItem: Text {
             text: "确定要丢弃当前选中的代码块 #" + (root.currentHunkIndex + 1) + " 吗？\n丢弃后此代码块的工作区修改将永久丢失。"
-            color: Theme.red
+            color: Theme.text
             font.pixelSize: Theme.fontSecondary
             wrapMode: Text.Wrap
         }

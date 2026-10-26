@@ -28,32 +28,10 @@ AppDialog {
             Layout.fillWidth: true
             spacing: 8
 
-            Rectangle {
+            AppTextField {
+                id: stashMsgInput
                 Layout.fillWidth: true
-                Layout.preferredHeight: 32
-                radius: 6
-                color: Theme.surface
-                border.color: stashMsgInput.activeFocus ? Theme.accent : Theme.separatorSoft
-                border.width: 1
-
-                TextInput {
-                    id: stashMsgInput
-                    anchors.fill: parent
-                    anchors.margins: 6
-                    font.pixelSize: Theme.fontSecondary
-                    color: Theme.text
-                    clip: true
-                    selectByMouse: true
-
-                    Text {
-                        anchors.fill: parent
-                        text: "输入说明（可选）..."
-                        color: Theme.placeholder
-                        font.pixelSize: Theme.fontSecondary
-                        visible: !stashMsgInput.text.length && !stashMsgInput.activeFocus
-                        verticalAlignment: Text.AlignVCenter
-                    }
-                }
+                placeholderText: "输入说明（可选）"
             }
 
             FlatCheckBox {
@@ -63,6 +41,7 @@ AppDialog {
 
             PrimaryButton {
                 text: "保存贮藏"
+                iconName: "archive"
                 enabled: root.workspace && !root.workspace.busy
                 onClicked: {
                     root.workspace.stashSave(stashMsgInput.text, untrackedCheck.checked)
@@ -97,10 +76,10 @@ AppDialog {
                     required property int index
                     required property string modelData
                     width: stashListView.width
-                    height: 42
-                    radius: 6
-                    color: stashRowHover.hovered ? "#F8F9FA" : Theme.surface
-                    border.color: stashRowHover.hovered ? Theme.accentSoft : Theme.separatorSoft
+                    height: 44
+                    radius: Theme.radiusMedium
+                    color: stashRowHover.hovered ? Theme.surfaceMuted : Theme.surface
+                    border.color: Theme.separatorSoft
                     border.width: 1
 
                     HoverHandler {
@@ -113,6 +92,7 @@ AppDialog {
                         anchors.rightMargin: 8
                         spacing: 8
 
+                        Icon { name: "archive"; size: 14; color: Theme.tertiaryText }
                         Text {
                             text: stashItemRow.modelData
                             color: Theme.text
@@ -124,31 +104,24 @@ AppDialog {
 
                         PrimaryButton {
                             text: "应用"
-                            secondary: true
-                            implicitHeight: 26
-                            implicitWidth: 52
-                            font.pixelSize: Theme.fontCaption
+                            kind: "gray"
+                            compact: true
                             enabled: root.workspace && !root.workspace.busy
                             onClicked: root.workspace.stashApply(stashItemRow.index, root.workspace.stashSha(stashItemRow.index))
                         }
 
                         PrimaryButton {
                             text: "弹出"
-                            secondary: true
-                            implicitHeight: 26
-                            implicitWidth: 52
-                            font.pixelSize: Theme.fontCaption
+                            kind: "gray"
+                            compact: true
                             enabled: root.workspace && !root.workspace.busy
                             onClicked: root.workspace.stashPop(stashItemRow.index, root.workspace.stashSha(stashItemRow.index))
                         }
 
                         PrimaryButton {
                             text: "删除"
-                            danger: true
-                            secondary: true
-                            implicitHeight: 26
-                            implicitWidth: 52
-                            font.pixelSize: Theme.fontCaption
+                            kind: "dangerTinted"
+                            compact: true
                             enabled: root.workspace && !root.workspace.busy
                             onClicked: {
                                 stashDropConfirmDialog.dropIndex = stashItemRow.index
@@ -176,6 +149,7 @@ AppDialog {
         id: stashDropConfirmDialog
         preferredWidth: 440
         title: "删除贮藏记录"
+        destructive: true
         standardButtons: Dialog.Cancel | Dialog.Ok
         property int dropIndex: -1
         property string dropDescription: ""
@@ -188,7 +162,7 @@ AppDialog {
             spacing: 8
             Text {
                 text: "确定要永久删除以下贮藏记录吗？\n此操作将永久抹除贮藏的修改，无法撤销："
-                color: Theme.red
+                color: Theme.text
                 font.pixelSize: Theme.fontSecondary
                 font.weight: Font.Medium
                 wrapMode: Text.Wrap
@@ -205,7 +179,7 @@ AppDialog {
                     anchors.margins: 8
                     text: stashDropConfirmDialog.dropDescription
                     color: Theme.text
-                    font.family: "DejaVu Sans Mono"
+                    font.family: Theme.monoFontFamily
                     font.pixelSize: Theme.fontSecondary
                     elide: Text.ElideMiddle
                     verticalAlignment: Text.AlignVCenter

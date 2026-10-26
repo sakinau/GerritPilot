@@ -188,7 +188,7 @@ Item {
                 font.pixelSize: Theme.fontSecondary
                 font.weight: Font.DemiBold
             }
-            ComboBox {
+            AppComboBox {
                 id: aiScopeCombo
                 objectName: "aiScopeCombo"
                 Layout.fillWidth: true
@@ -210,7 +210,7 @@ Item {
                 font.pixelSize: Theme.fontSecondary
                 font.weight: Font.DemiBold
             }
-            ComboBox {
+            AppComboBox {
                 id: aiTypeCombo
                 objectName: "aiTypeCombo"
                 Layout.fillWidth: true
@@ -242,60 +242,21 @@ Item {
                     font.weight: Font.DemiBold
                 }
                 Item { Layout.fillWidth: true }
-                Rectangle {
-                    implicitWidth: bugPillText.implicitWidth + 12
-                    implicitHeight: 22
-                    radius: 11
-                    color: aiDialog.issueTypePrefix === "m-" ? Theme.accent : Theme.surfaceMuted
-                    border.color: aiDialog.issueTypePrefix === "m-" ? Theme.accent : Theme.separatorSoft
-                    border.width: 1
-                    Text {
-                        id: bugPillText
-                        anchors.centerIn: parent
-                        text: "m- 问题单"
-                        font.pixelSize: Theme.fontCaption
-                        color: aiDialog.issueTypePrefix === "m-" ? "white" : Theme.secondaryText
-                    }
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            aiDialog.issueTypePrefix = "m-"
-                            var t = aiIssueField.text.trim()
-                            if (t.length > 0 && /(?:^|[,;，；\s])r-/i.test(t)) {
-                                aiIssueField.text = switchIssuePrefix(t, "m-")
-                            }
-                        }
-                    }
-                }
-                Rectangle {
-                    implicitWidth: reqPillText.implicitWidth + 12
-                    implicitHeight: 22
-                    radius: 11
-                    color: aiDialog.issueTypePrefix === "r-" ? Theme.accent : Theme.surfaceMuted
-                    border.color: aiDialog.issueTypePrefix === "r-" ? Theme.accent : Theme.separatorSoft
-                    border.width: 1
-                    Text {
-                        id: reqPillText
-                        anchors.centerIn: parent
-                        text: "r- 需求单"
-                        font.pixelSize: Theme.fontCaption
-                        color: aiDialog.issueTypePrefix === "r-" ? "white" : Theme.secondaryText
-                    }
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            aiDialog.issueTypePrefix = "r-"
-                            var t = aiIssueField.text.trim()
-                            if (t.length > 0 && /(?:^|[,;，；\s])m-/i.test(t)) {
-                                aiIssueField.text = switchIssuePrefix(t, "r-")
-                            }
-                        }
+                SegmentedControl {
+                    compact: true
+                    model: ["m- 问题单", "r- 需求单"]
+                    currentIndex: aiDialog.issueTypePrefix === "m-" ? 0 : 1
+                    onActivated: index => {
+                        const prefix = index === 0 ? "m-" : "r-"
+                        const other = index === 0 ? /(?:^|[,;，；\s])r-/i : /(?:^|[,;，；\s])m-/i
+                        aiDialog.issueTypePrefix = prefix
+                        const t = aiIssueField.text.trim()
+                        if (t.length > 0 && other.test(t))
+                            aiIssueField.text = switchIssuePrefix(t, prefix)
                     }
                 }
             }
-            TextField {
+            AppTextField {
                 id: aiIssueField
                 objectName: "aiIssueField"
                 Layout.fillWidth: true
@@ -333,7 +294,7 @@ Item {
                 font.pixelSize: Theme.fontSecondary
                 font.weight: Font.DemiBold
             }
-            TextField {
+            AppTextField {
                 id: aiSecondaryIssueField
                 objectName: "aiSecondaryIssueField"
                 Layout.fillWidth: true
@@ -360,7 +321,7 @@ Item {
                 font.pixelSize: Theme.fontSecondary
                 font.weight: Font.DemiBold
             }
-            TextField {
+            AppTextField {
                 id: aiPurposeField
                 objectName: "aiCommitPurpose"
                 Layout.fillWidth: true
@@ -378,10 +339,8 @@ Item {
             Rectangle {
                 Layout.fillWidth: true
                 Layout.preferredHeight: compileCol.implicitHeight + 14
-                radius: 6
-                color: "#F8F9FA"
-                border.color: Theme.separatorSoft
-                border.width: 1
+                radius: Theme.radiusMedium
+                color: Theme.surfaceGrouped
 
                 ColumnLayout {
                     id: compileCol
@@ -410,7 +369,7 @@ Item {
                         }
                     }
 
-                    TextField {
+                    AppTextField {
                         id: aiCompileNoteField
                         objectName: "aiCompileNoteField"
                         Layout.fillWidth: true
@@ -432,7 +391,7 @@ Item {
             RowLayout {
                 Layout.fillWidth: true
                 spacing: 8
-                BusyIndicator {
+                Spinner {
                     objectName: "aiCommitBusyIndicator"
                     Layout.preferredWidth: Theme.controlHeight * 0.7
                     Layout.preferredHeight: Theme.controlHeight * 0.7
@@ -506,13 +465,14 @@ Item {
             Layout.fillWidth: true
             Text { text: "提交说明"; color: Theme.text; font.pixelSize: Theme.fontSubheading; font.weight: Font.DemiBold; Layout.alignment: Qt.AlignVCenter }
             Item { Layout.fillWidth: true }
-            IconButton {
+            PrimaryButton {
                 id: aiCommitButton
                 objectName: "aiCommitButton"
-                glyph: "✦"
+                kind: "tinted"
+                compact: true
+                iconName: "sparkles"
+                text: "AI 生成"
                 toolTip: "打开 AI 提交说明面板"
-                Layout.preferredWidth: Theme.controlHeight
-                Layout.preferredHeight: Theme.controlHeight
                 enabled: root.workspace && root.workspace.selectedPath.length > 0
                 onClicked: aiDialog.open()
             }
@@ -540,7 +500,15 @@ Item {
                 onTextChanged: {
                     draftSaveTimer.restart()
                 }
-                background: Rectangle { color: Theme.surfaceMuted; radius: Theme.controlRadius; border.color: editor.activeFocus ? Theme.accent : Theme.separatorSoft }
+                placeholderTextColor: Theme.placeholder
+                selectionColor: Theme.accentSoft
+                selectedTextColor: Theme.text
+                background: Rectangle {
+                    color: Theme.surface
+                    radius: Theme.radiusMedium
+                    border.width: editor.activeFocus ? 2 : 1
+                    border.color: editor.activeFocus ? Theme.focusRing : Theme.separator
+                }
             }
         }
 
@@ -623,9 +591,11 @@ Item {
             Layout.fillWidth: true
             visible: editor.text.trim().length > 0
             implicitHeight: issueStatusRow.implicitHeight + 8
-            radius: 4
-            color: mainContentCol.hasValidIssuePrefix ? Qt.rgba(0.1, 0.7, 0.3, 0.08) : Qt.rgba(0.95, 0.55, 0.1, 0.1)
-            border.color: mainContentCol.hasValidIssuePrefix ? Qt.rgba(0.1, 0.7, 0.3, 0.25) : Qt.rgba(0.95, 0.55, 0.1, 0.35)
+            id: issueStrip
+            readonly property var tone: Theme.tones[mainContentCol.hasValidIssuePrefix ? "success" : "warning"]
+            radius: Theme.radiusSmall + 1
+            color: tone.background
+            border.color: tone.border
             border.width: 1
 
             RowLayout {
@@ -635,11 +605,10 @@ Item {
                 anchors.rightMargin: 8
                 spacing: 6
 
-                Text {
-                    text: mainContentCol.hasValidIssuePrefix ? "✓" : "⚠"
-                    color: mainContentCol.hasValidIssuePrefix ? Theme.accent : Theme.orange
-                    font.pixelSize: Theme.fontCaption
-                    font.weight: Font.Bold
+                Icon {
+                    name: mainContentCol.hasValidIssuePrefix ? "check-circle" : "alert-triangle"
+                    size: 13
+                    color: issueStrip.tone.foreground
                 }
 
                 Text {
@@ -656,26 +625,29 @@ Item {
                         }
                         return desc
                     }
-                    color: mainContentCol.hasValidIssuePrefix ? Theme.text : Theme.orange
+                    color: issueStrip.tone.foreground
                     font.pixelSize: Theme.fontCaption
                     elide: Text.ElideRight
                 }
 
                 Rectangle {
                     visible: !mainContentCol.hasValidIssuePrefix
-                    implicitWidth: quickPrefixBtnText.implicitWidth + 12
+                    implicitWidth: quickPrefixBtnText.implicitWidth + 14
                     implicitHeight: 20
-                    radius: 3
-                    color: Theme.orange
+                    radius: 10
+                    color: quickPrefixMouse.containsMouse ? "#FFB340" : Theme.orange
                     Text {
                         id: quickPrefixBtnText
                         anchors.centerIn: parent
                         text: "补全单号"
-                        font.pixelSize: 11
-                        color: "white"
+                        font.pixelSize: Theme.fontCaption
+                        font.weight: Font.DemiBold
+                        color: Theme.textOnAccent
                     }
                     MouseArea {
+                        id: quickPrefixMouse
                         anchors.fill: parent
+                        hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
                         onClicked: {
                             var defaultPrefix = (editor.text.indexOf("fix") !== -1 ? "m-" : "r-")
@@ -728,7 +700,7 @@ Item {
                      && root.workspace.pushState !== 0
                      && root.workspace.pushRepositoryKey === root.draftKey
 
-            BusyIndicator {
+            Spinner {
                 objectName: "pushBusyIndicator"
                 Layout.preferredWidth: Theme.controlHeight * 0.65
                 Layout.preferredHeight: Theme.controlHeight * 0.65
@@ -763,9 +735,9 @@ Item {
             objectName: "gerritUrlCard"
             Layout.fillWidth: true
             Layout.preferredHeight: gerritUrlRow.implicitHeight + 12
-            radius: 6
-            color: Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.08)
-            border.color: Theme.accent
+            radius: Theme.radiusMedium
+            color: Theme.tones.success.background
+            border.color: Theme.tones.success.border
             visible: root.workspace && root.workspace.pushRepositoryKey === root.draftKey
                      && root.workspace.lastGerritReviewUrl && root.workspace.lastGerritReviewUrl.length > 0
 
@@ -773,11 +745,13 @@ Item {
                 id: gerritUrlRow
                 anchors.fill: parent
                 anchors.margins: 6
-                spacing: 6
+                anchors.leftMargin: 10
+                spacing: 8
 
-                Text {
-                    text: "🔗"
-                    font.pixelSize: Theme.fontBody
+                Icon {
+                    name: "link"
+                    size: 15
+                    color: Theme.tones.success.foreground
                 }
 
                 ColumnLayout {
@@ -785,7 +759,7 @@ Item {
                     spacing: 1
                     Text {
                         text: "Gerrit 审查单已就绪"
-                        color: Theme.text
+                        color: Theme.tones.success.foreground
                         font.pixelSize: Theme.fontSecondary
                         font.bold: true
                     }
@@ -800,7 +774,7 @@ Item {
 
                 IconButton {
                     objectName: "copyReviewUrlButton"
-                    glyph: "⧉"
+                    iconName: "copy"
                     toolTip: "复制审查链接"
                     Layout.preferredHeight: Theme.controlHeight
                     Layout.preferredWidth: Theme.controlHeight

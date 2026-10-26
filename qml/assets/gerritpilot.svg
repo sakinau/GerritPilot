@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" version="1.2" baseProfile="tiny" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <title>GerritPilot</title>
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1024" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#5AB8FF"/>
+      <stop offset="0.55" stop-color="#2F86F6"/>
+      <stop offset="1" stop-color="#3550E0"/>
+    </linearGradient>
+    <linearGradient id="gloss" x1="0" y1="0" x2="0" y2="560" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="mark" x1="0" y1="250" x2="0" y2="800" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#EAF2FF"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Continuous-corner tile -->
+  <path fill="url(#tile)" d="M512 0C819 0 870 0 947 77 1024 154 1024 205 1024 512 1024 819 1024 870 947 947 870 1024 819 1024 512 1024 205 1024 154 1024 77 947 0 870 0 819 0 512 0 205 0 154 77 77 154 0 205 0 512 0Z"/>
+  <path fill="url(#gloss)" d="M512 0C819 0 870 0 947 77 1024 154 1024 205 1024 512L1024 560 0 560 0 512C0 205 0 154 77 77 154 0 205 0 512 0Z"/>
+
+  <!-- Soft drop under the mark -->
+  <g fill="none" stroke="#1B3FB8" stroke-opacity="0.22" stroke-width="64" stroke-linecap="round" stroke-linejoin="round" transform="translate(0 14)">
+    <path d="M360 372V652"/>
+    <path d="M360 640C360 520 470 452 618 414"/>
+    <circle cx="360" cy="306" r="66"/>
+    <circle cx="360" cy="718" r="66"/>
+  </g>
+  <path fill="#1B3FB8" fill-opacity="0.22" stroke="#1B3FB8" stroke-opacity="0.22" stroke-width="36" stroke-linejoin="round" transform="translate(0 14)" d="M736 288 682 532 620 410 498 348Z"/>
+
+  <!-- Git graph: trunk with two commits, branch rising into a navigation arrow -->
+  <g fill="none" stroke="url(#mark)" stroke-width="64" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M360 372V652"/>
+    <path d="M360 640C360 520 470 452 618 414"/>
+    <circle cx="360" cy="306" r="66"/>
+    <circle cx="360" cy="718" r="66"/>
+  </g>
+  <path fill="#FFFFFF" stroke="#FFFFFF" stroke-width="36" stroke-linejoin="round" d="M736 288 682 532 620 410 498 348Z"/>
+</svg>

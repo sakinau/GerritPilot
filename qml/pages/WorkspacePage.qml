@@ -31,30 +31,13 @@ Item {
         enabled: !repoProject.busy
         anchors.fill: parent
         orientation: Qt.Horizontal
-        handle: Rectangle {
-            implicitWidth: 8
-            color: "transparent"
-            Rectangle {
-                anchors.centerIn: parent
-                width: 1
-                height: parent.height
-                color: SplitHandle.pressed ? Theme.accent : Theme.separator
-            }
-            Rectangle {
-                anchors.centerIn: parent
-                width: 4
-                height: 34
-                radius: 2
-                visible: SplitHandle.pressed || SplitHandle.hovered
-                color: SplitHandle.pressed ? Theme.accent : Theme.scrollThumb
-            }
-        }
+        handle: SplitHandleBar { showLine: false }
 
         Sidebar {
             id: sidebar
-            SplitView.preferredWidth: page.sidebarCollapsed ? 72 : 286
-            SplitView.minimumWidth: page.sidebarCollapsed ? 72 : 240
-            SplitView.maximumWidth: 380
+            SplitView.preferredWidth: page.sidebarCollapsed ? 60 : 292
+            SplitView.minimumWidth: page.sidebarCollapsed ? 60 : 248
+            SplitView.maximumWidth: page.sidebarCollapsed ? 60 : 380
             workspace: page.workspaceApi
             collapsed: page.sidebarCollapsed
             onToggleRequested: page.sidebarCollapsed = !page.sidebarCollapsed
@@ -66,10 +49,10 @@ Item {
 
             ColumnLayout {
                 anchors.fill: parent
-                anchors.leftMargin: 5
-                anchors.rightMargin: 8
-                anchors.topMargin: 8
-                anchors.bottomMargin: 8
+                anchors.leftMargin: 0
+                anchors.rightMargin: 10
+                anchors.topMargin: 10
+                anchors.bottomMargin: 10
                 spacing: 8
 
                 RepositoryDetailPane {

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=GerritPilot
+GenericName=Gerrit Review Client
+Comment=repo + Gerrit multi-repository commit and review workspace
+Exec=gerritpilot
+Icon=gerritpilot
+Terminal=false
+Categories=Development;RevisionControl;
+StartupWMClass=gerritpilot

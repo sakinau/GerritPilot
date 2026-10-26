@@ -3,15 +3,14 @@
 
 #include <QFont>
 #include <QIcon>
-#include <QLinearGradient>
 #include <QPainter>
-#include <QPainterPath>
 #include <QPixmap>
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickStyle>
 #include <QSettings>
+#include <QSvgRenderer>
 
 int main(int argc, char *argv[])
 {
@@ -35,6 +34,7 @@ int main(int argc, char *argv[])
         qputenv("QT_SCALE_FACTOR", QByteArray::number(scalePercent / 100.0, 'f', 2));
 
     QGuiApplication application(argc, argv);
+    QGuiApplication::setDesktopFileName(QStringLiteral("gerritpilot"));
     QCoreApplication::setApplicationName(QStringLiteral("GerritPilot"));
     QCoreApplication::setOrganizationName(QStringLiteral("GerritPilot"));
     QQuickStyle::setStyle(QStringLiteral("Basic"));
@@ -44,32 +44,15 @@ int main(int argc, char *argv[])
     appFont.setStyleHint(QFont::SansSerif, QFont::PreferAntialias);
     application.setFont(appFont);
 
+    // Same SVG as the in-app logo (AppIcon.qml) and the installed desktop icon.
+    QSvgRenderer logo(QStringLiteral(":/qt/qml/GerritPilot/qml/assets/gerritpilot.svg"));
     QIcon appIcon;
-    for (const int size : {32, 64, 128}) {
+    for (const int size : {16, 24, 32, 48, 64, 128, 256}) {
         QPixmap pixmap(size, size);
         pixmap.fill(Qt::transparent);
         QPainter painter(&pixmap);
         painter.setRenderHint(QPainter::Antialiasing);
-        painter.scale(size / 64.0, size / 64.0);
-        QLinearGradient gradient(0, 0, 64, 64);
-        gradient.setColorAt(0, QColor(QStringLiteral("#42B5FF")));
-        gradient.setColorAt(1, QColor(QStringLiteral("#0A84FF")));
-        painter.setPen(Qt::NoPen);
-        painter.setBrush(gradient);
-        painter.drawRoundedRect(QRectF(1, 1, 62, 62), 16, 16);
-        painter.setPen(QPen(Qt::white, 4.5, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
-        painter.setBrush(Qt::NoBrush);
-        QPainterPath branch;
-        branch.moveTo(20, 20);
-        branch.lineTo(20, 46);
-        branch.moveTo(20, 29);
-        branch.lineTo(45, 29);
-        branch.lineTo(45, 43);
-        painter.drawPath(branch);
-        painter.setPen(Qt::NoPen);
-        painter.setBrush(Qt::white);
-        for (const QPointF point : {QPointF(20, 18), QPointF(20, 46), QPointF(45, 45)})
-            painter.drawEllipse(point, 5, 5);
+        logo.render(&painter);
         painter.end();
         appIcon.addPixmap(pixmap);
     }

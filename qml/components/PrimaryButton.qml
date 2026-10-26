@@ -3,31 +3,61 @@ import QtQuick.Controls.Basic
 import QtQuick.Layouts
 import GerritPilot
 
+// iOS button styles:
+//   filled  - solid accent (default)       gray   - neutral fill (`secondary: true`)
+//   tinted  - accent tint with accent text plain  - text only, fill on hover
+//   danger  - solid red                     dangerTinted - red tint with red text
 Button {
     id: root
     property string glyph: ""
+    property string iconName: ""
     property string toolTip: ""
     property bool secondary: false
     property bool danger: false
-    implicitHeight: Theme.controlHeight
-    font.pixelSize: Theme.fontBody
-    implicitWidth: Math.max(92, contentRow.implicitWidth + 28)
+    property bool compact: false
+    property string kind: danger ? "danger" : secondary ? "gray" : "filled"
+
+    readonly property bool solid: kind === "filled" || kind === "danger"
+    readonly property color foreground: {
+        if (!root.enabled) return Theme.quaternaryText
+        switch (root.kind) {
+        case "filled":
+        case "danger": return Theme.textOnAccent
+        case "gray": return Theme.text
+        case "dangerTinted": return Theme.redText
+        default: return Theme.accent
+        }
+    }
+
+    implicitHeight: compact ? Theme.controlHeightSmall : Theme.controlHeight
+    font.pixelSize: compact ? Theme.fontSecondary : Theme.fontBody
+    implicitWidth: Math.max(compact ? 0 : 84, contentRow.implicitWidth + (compact ? 20 : 28))
     hoverEnabled: true
     padding: 0
+    // Basic style binds horizontalPadding separately; zero it so width math is exact.
+    horizontalPadding: 0
+    verticalPadding: 0
     topInset: 0
     bottomInset: 0
     leftInset: 0
     rightInset: 0
 
     background: Rectangle {
-        radius: Theme.controlRadius
+        radius: Math.min(Theme.controlRadius, height / 2)
         color: {
-            if (!root.enabled) return Theme.separatorSoft
-            if (root.danger) return root.down ? "#D9362C" : root.hovered ? "#FF5B52" : Theme.red
-            if (root.secondary) return root.down ? "#E2E3E9" : root.hovered ? "#F0F1F5" : Theme.surfaceStrong
-            return root.down ? "#0876DA" : root.hovered ? "#2092FF" : Theme.accent
+            if (!root.enabled) return root.kind === "plain" ? "transparent" : Theme.fillQuaternary
+            switch (root.kind) {
+            case "danger": return root.down ? Theme.redPressed : root.hovered ? Theme.redHover : Theme.red
+            case "gray": return root.down ? Theme.fillPrimary : root.hovered ? Theme.fillSecondary : Theme.fillTertiary
+            case "tinted": return root.down ? "#33007AFF" : root.hovered ? "#29007AFF" : Theme.accentTint
+            case "dangerTinted": return root.down ? "#33FF3B30" : root.hovered ? "#29FF3B30" : "#1AFF3B30"
+            case "plain": return root.down ? Theme.pressedFill : root.hovered ? Theme.hoverFill : "transparent"
+            default: return root.down ? Theme.accentPressed : root.hovered ? Theme.accentHover : Theme.accent
+            }
         }
-        border.color: root.visualFocus ? Theme.accent : root.secondary ? Theme.separator : "transparent"
+        border.width: root.visualFocus ? 2 : 0
+        border.color: Theme.focusRing
+        Behavior on color { ColorAnimation { duration: Theme.animationFast } }
     }
     contentItem: Item {
         implicitWidth: contentRow.implicitWidth
@@ -35,14 +65,22 @@ Button {
         RowLayout {
             id: contentRow
             anchors.centerIn: parent
-            width: Math.min(implicitWidth, Math.max(0, parent.width - 16))
-            spacing: 7
+            width: Math.min(implicitWidth, Math.max(0, parent.width - 8))
+            spacing: root.compact ? 4 : 6
+            Icon {
+                visible: root.iconName.length > 0
+                name: root.iconName
+                size: root.compact ? 13 : 15
+                strokeWidth: root.solid ? 1.9 : 1.7
+                color: root.foreground
+                Layout.alignment: Qt.AlignVCenter
+            }
             Text {
-                visible: root.glyph.length > 0
-                Layout.preferredWidth: root.glyph.length > 0 ? -1 : 0
-                Layout.preferredHeight: root.glyph.length > 0 ? -1 : 0
+                visible: root.glyph.length > 0 && root.iconName.length === 0
+                Layout.preferredWidth: visible ? -1 : 0
+                Layout.preferredHeight: visible ? -1 : 0
                 text: root.glyph
-                color: !root.enabled ? Theme.tertiaryText : root.secondary ? Theme.secondaryText : "white"
+                color: root.foreground
                 font.pixelSize: Theme.fontSubheading
                 font.weight: Font.DemiBold
                 verticalAlignment: Text.AlignVCenter
@@ -50,12 +88,13 @@ Button {
             Text {
                 text: root.text
                 objectName: "buttonLabel"
+                visible: text.length > 0
                 Layout.fillWidth: true
                 elide: Text.ElideRight
                 horizontalAlignment: Text.AlignHCenter
-                color: !root.enabled ? Theme.tertiaryText : root.secondary ? Theme.text : "white"
+                color: root.foreground
                 font.pixelSize: root.font.pixelSize
-                font.weight: Font.DemiBold
+                font.weight: root.solid ? Font.DemiBold : Font.Medium
                 verticalAlignment: Text.AlignVCenter
             }
         }

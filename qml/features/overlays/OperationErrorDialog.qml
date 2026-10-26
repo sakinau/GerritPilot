@@ -40,9 +40,16 @@ Item {
                     width: errorScroll.availableWidth
                     readOnly: true
                     text: dialog.errorMessage
-                    color: Theme.text
+                    color: Theme.tones.danger.foreground
+                    font.family: Theme.monoFontFamily
+                    font.pixelSize: Theme.fontSecondary
                     wrapMode: TextEdit.WrapAnywhere
-                    background: Rectangle { color: Theme.redSoft; radius: 10 }
+                    padding: 12
+                    background: Rectangle {
+                        color: Theme.tones.danger.background
+                        border.color: Theme.tones.danger.border
+                        radius: Theme.radiusMedium
+                    }
                 }
             }
             PrimaryButton {

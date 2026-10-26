@@ -27,24 +27,31 @@ Item {
         modal: true
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
         padding: 0
-        Overlay.modal: Rectangle { color: "#33000000" }
-        background: Rectangle {
-            color: Theme.surfaceStrong
+        Overlay.modal: Rectangle { color: Theme.scrim }
+        background: FloatingSurface {
             radius: Theme.radiusXLarge
-            border.color: Theme.separator
+            elevation: 10
         }
         contentItem: ColumnLayout {
             spacing: 0
             RowLayout {
                 Layout.fillWidth: true
                 Layout.margins: 16
+                spacing: 10
+                Rectangle {
+                    Layout.preferredWidth: 30
+                    Layout.preferredHeight: 30
+                    radius: 8
+                    color: Theme.accentTint
+                    Icon { anchors.centerIn: parent; name: "git-branch"; size: 17; color: Theme.accent }
+                }
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: 1
                     Text { text: "本地分支管理"; color: Theme.text; font.pixelSize: Theme.fontHeading; font.weight: Font.DemiBold }
                     Text { text: root.workspace.selectedName; color: Theme.tertiaryText; font.pixelSize: Theme.fontCaption }
                 }
-                IconButton { glyph: "×"; Layout.preferredWidth: Theme.controlHeight; onClicked: branchPopup.close() }
+                IconButton { iconName: "x"; toolTip: "关闭"; onClicked: branchPopup.close() }
             }
             Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: Theme.separatorSoft }
             RowLayout {
@@ -59,6 +66,7 @@ Item {
                     objectName: "createBranchButton"
                     Layout.fillWidth: true
                     text: "新建分支"
+                    iconName: "plus"
                     enabled: root.workspace && !root.workspace.busy
                     onClicked: { branchPopup.close(); createBranchDialog.open() }
                 }
@@ -67,7 +75,7 @@ Item {
                     objectName: "pruneBranchButton"
                     Layout.fillWidth: true
                     text: (root.workspace && root.workspace.isRepoWorkspace) ? "清理已合入分支" : "清理失效远端分支"
-                    secondary: true
+                    kind: "gray"
                     toolTip: (root.workspace && root.workspace.isRepoWorkspace) ? "执行 repo prune" : "执行 git remote prune"
                     enabled: root.workspace && !root.workspace.busy
                     onClicked: {
@@ -93,8 +101,10 @@ Item {
                     id: branchDelegate
                     required property string modelData
                     width: branchList.width
-                    height: 40
+                    height: 38
                     hoverEnabled: true
+                    leftPadding: 10
+                    rightPadding: 6
                     onClicked: {
                         if (modelData !== root.workspace.selectedBranch) {
                             root.pendingBranch = modelData
@@ -104,23 +114,20 @@ Item {
                     }
                     readonly property bool isCurrent: branchDelegate.modelData === root.workspace.selectedBranch
                     background: Rectangle {
-                        radius: 6
-                        color: branchDelegate.isCurrent ? Theme.accentSoft : branchDelegate.hovered ? "#F8F9FA" : "transparent"
-                        border.color: branchDelegate.isCurrent ? Theme.accent : branchDelegate.hovered ? Theme.separatorSoft : "transparent"
-                        border.width: 1
+                        radius: Theme.radiusSmall + 2
+                        color: branchDelegate.isCurrent ? Theme.accentTint : branchDelegate.hovered ? Theme.hoverFill : "transparent"
                     }
                     contentItem: RowLayout {
                         spacing: 9
-                        Text {
-                            text: branchDelegate.modelData === root.workspace.selectedBranch ? "✓" : ""
-                            color: Theme.accent
-                            font.pixelSize: Theme.fontBody
-                            font.weight: Font.Bold
-                            Layout.preferredWidth: 16
+                        Icon {
+                            name: branchDelegate.isCurrent ? "check" : "git-branch"
+                            size: 14
+                            strokeWidth: branchDelegate.isCurrent ? 2.2 : 1.6
+                            color: branchDelegate.isCurrent ? Theme.accent : Theme.tertiaryText
                         }
                         Text {
                             text: branchDelegate.modelData
-                            color: Theme.text
+                            color: branchDelegate.isCurrent ? Theme.accent : Theme.text
                             font.pixelSize: Theme.fontSecondary
                             font.weight: branchDelegate.modelData === root.workspace.selectedBranch ? Font.DemiBold : Font.Normal
                             elide: Text.ElideMiddle
@@ -128,7 +135,9 @@ Item {
                         }
                         IconButton {
                             visible: branchDelegate.modelData !== root.workspace.selectedBranch
-                            glyph: "🗑"
+                            iconName: "trash"
+                            destructive: true
+                            opacity: branchDelegate.hovered ? 1 : 0
                             toolTip: "删除本地分支"
                             Layout.preferredWidth: 26
                             Layout.preferredHeight: 26
@@ -163,6 +172,7 @@ Item {
         objectName: "deleteBranchConfirmDialog"
         preferredWidth: 450
         title: "删除本地分支"
+        destructive: true
         standardButtons: Dialog.Cancel | Dialog.Ok
         onAccepted: {
             if (root.workspace && typeof root.workspace.deleteBranch === "function") {
@@ -187,11 +197,10 @@ Item {
                 wrapMode: Text.Wrap
                 Layout.fillWidth: true
             }
-            CheckBox {
+            FlatCheckBox {
                 id: forceDeleteCheckbox
                 text: "强制删除 (-D，即使包含未合并提交也强制删除)"
                 checked: false
-                Layout.fillWidth: true
             }
         }
     }
@@ -216,7 +225,7 @@ Item {
         contentItem: ColumnLayout {
             spacing: 10
             Text { text: "从当前 HEAD 创建并切换到本地分支，保留工作区改动。不修改 Manifest，不创建远端分支。"; wrapMode: Text.Wrap; Layout.fillWidth: true; color: Theme.secondaryText; font.pixelSize: Theme.fontSecondary }
-            TextField { id: newBranchName; objectName: "newBranchName"; Layout.fillWidth: true; placeholderText: "例如 feature/new-feature"; selectByMouse: true; font.pixelSize: Theme.fontBody; onAccepted: if (createBranchDialog.canAccept) createBranchDialog.accept() }
+            AppTextField { id: newBranchName; objectName: "newBranchName"; Layout.fillWidth: true; placeholderText: "例如 feature/new-feature"; selectByMouse: true; font.pixelSize: Theme.fontBody; onAccepted: if (createBranchDialog.canAccept) createBranchDialog.accept() }
             Text { visible: createBranchDialog.isDuplicate; text: "同名本地分支已存在，请选择其他名称或切换到已有分支。"; wrapMode: Text.Wrap; Layout.fillWidth: true; color: Theme.orange; font.pixelSize: Theme.fontSecondary }
         }
     }

@@ -7,22 +7,34 @@ Item {
     property bool checked: false
     property bool controlled: false
     property string text: ""
+    property color checkedColor: Theme.accent
+    property color uncheckedBorder: Theme.separator
     signal toggled(bool checked)
     implicitWidth: text.length > 0 ? (row.implicitWidth + 4) : 18
     implicitHeight: Math.max(20, row.implicitHeight)
+    opacity: enabled ? 1 : 0.5
 
     RowLayout {
         id: row
         anchors.verticalCenter: parent.verticalCenter
-        spacing: 6
+        spacing: 7
         Rectangle {
             Layout.preferredWidth: 16
             Layout.preferredHeight: 16
             Layout.alignment: Qt.AlignVCenter
-            radius: 4
-            color: root.checked ? Theme.accent : Theme.surfaceStrong
-            border.color: root.checked ? Theme.accent : Theme.separator
-            Text { anchors.centerIn: parent; text: "✓"; visible: root.checked; color: "white"; font.pixelSize: Theme.fontSecondary; font.weight: Font.Bold }
+            radius: 5
+            color: root.checked ? root.checkedColor : Theme.surface
+            border.width: root.checked ? 0 : 1.5
+            border.color: checkMouse.containsMouse ? Theme.accent : root.uncheckedBorder
+            Behavior on color { ColorAnimation { duration: Theme.animationFast } }
+            Icon {
+                anchors.centerIn: parent
+                visible: root.checked
+                name: "check"
+                size: 12
+                strokeWidth: 2.2
+                color: Theme.textOnAccent
+            }
         }
         Text {
             visible: root.text.length > 0
@@ -35,7 +47,9 @@ Item {
     }
 
     MouseArea {
+        id: checkMouse
         anchors.fill: parent
+        hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
         onClicked: {
             const nextChecked = !root.checked

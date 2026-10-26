@@ -104,12 +104,12 @@ Item {
 
             RowLayout {
                 spacing: 14
-                RadioButton {
+                AppRadioButton {
                     text: "Git 拉取上游"
                     checked: syncDialog.syncMethod === 0
                     onClicked: syncDialog.syncMethod = 0
                 }
-                RadioButton {
+                AppRadioButton {
                     text: "Repo 按清单同步"
                     checked: syncDialog.syncMethod === 1
                     enabled: syncDialog.repoAvailable
@@ -139,21 +139,21 @@ Item {
 
             RowLayout {
                 spacing: 14
-                RadioButton {
+                AppRadioButton {
                     id: scopeCurrentRadio
                     text: "当前仓库" + (syncDialog.hasActiveRepo ? (" (" + root.workspace.selectedName + ")") : "")
                     checked: syncDialog.syncScope === 0
                     enabled: syncDialog.hasActiveRepo
                     onClicked: syncDialog.syncScope = 0
                 }
-                RadioButton {
+                AppRadioButton {
                     id: scopeCheckedRadio
                     text: "已勾选 (" + syncDialog.checkedCount + ")"
                     checked: syncDialog.syncScope === 1
                     enabled: syncDialog.checkedCount > 0
                     onClicked: syncDialog.syncScope = 1
                 }
-                RadioButton {
+                AppRadioButton {
                     id: scopeAllRadio
                     text: syncDialog.syncMethod === 1 ? "整个项目" : "全部仓库 (" + syncDialog.totalCount + ")"
                     checked: syncDialog.syncScope === 2
@@ -171,8 +171,8 @@ Item {
             Rectangle {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 56
-                color: Theme.surfaceMuted
-                radius: 8
+                color: Theme.surfaceGrouped
+                radius: Theme.radiusMedium
                 border.color: Theme.separatorSoft
                 Text {
                     anchors.fill: parent
@@ -259,14 +259,14 @@ Item {
                 font.pixelSize: Theme.fontCaption
                 wrapMode: Text.Wrap
             }
-            TextField {
+            AppTextField {
                 id: upstreamRemote
                 objectName: "upstreamRemote"
                 Layout.fillWidth: true
                 placeholderText: "Remote 名称，例如 origin"
                 font.pixelSize: Theme.fontSecondary
             }
-            TextField {
+            AppTextField {
                 id: upstreamBranch
                 objectName: "upstreamBranch"
                 Layout.fillWidth: true
@@ -413,8 +413,8 @@ Item {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 56
                 color: Theme.accentSoft
-                radius: 10
-                border.color: "#BBD7F0"
+                radius: Theme.radiusMedium
+                border.color: Theme.tones.info.border
                 Text {
                     anchors.fill: parent
                     anchors.margins: 10
@@ -436,7 +436,9 @@ Item {
             }
             PrimaryButton {
                 text: "刷新远端目标分支"
-                secondary: true
+                kind: "gray"
+                compact: true
+                iconName: "refresh"
                 enabled: root.workspace && !root.workspace.busy
                 onClicked: root.workspace.requestRemoteBranches(pushDialog.currentRemote)
             }
@@ -481,7 +483,7 @@ Item {
                     font.pixelSize: Theme.fontSecondary
                     Layout.alignment: Qt.AlignVCenter
                 }
-                TextField {
+                AppTextField {
                     id: remoteInput
                     objectName: "remoteInput"
                     Layout.fillWidth: true
@@ -506,7 +508,7 @@ Item {
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: 6
-                    TextField {
+                    AppTextField {
                         id: branchSearchInput
                         objectName: "branchSearchInput"
                         Layout.fillWidth: true
@@ -517,7 +519,7 @@ Item {
                             pushDialog.updateOkButton()
                         }
                     }
-                    ComboBox {
+                    AppComboBox {
                         id: branchCombo
                         objectName: "branchCombo"
                         Layout.fillWidth: true
@@ -534,7 +536,7 @@ Item {
                     font.pixelSize: Theme.fontSecondary
                     Layout.alignment: Qt.AlignVCenter
                 }
-                TextField {
+                AppTextField {
                     id: topicInput
                     objectName: "topicInput"
                     Layout.fillWidth: true

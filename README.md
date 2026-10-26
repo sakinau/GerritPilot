@@ -52,29 +52,37 @@ env QT_QPA_PLATFORM=offscreen QT_QUICK_CONTROLS_STYLE=Basic QML_DISABLE_DISK_CAC
 ```text
 GerritPilotNext/
 ├── CMakeLists.txt
+├── packaging/gerritpilot.desktop  # Linux 桌面入口
 ├── qml/
 │   ├── App.qml
-│   ├── Theme.qml
-│   ├── pages/
-│   │   └── WorkspacePage.qml
+│   ├── Theme.qml                  # 设计 Token：iOS 系统色、填充、语义色调、Diff 配色、圆角/间距/动效
+│   ├── assets/gerritpilot.svg     # 应用 Logo（窗口图标、侧栏品牌、桌面图标共用）
+│   ├── pages/WorkspacePage.qml
 │   ├── features/
-│   │   ├── navigation/        # 侧边栏与仓库/分支导航
-│   │   ├── repositories/      # 详情面板、Diff 查看、提交编辑与历史
-│   │   └── overlays/          # 弹窗与设置抽屉面板
-│   └── components/            # 通用基础组件（按钮、卡片、滚动条等）
-├── src/
-│   ├── main.cpp
-│   ├── workspacecontroller.*  # 应用协调控制器
-│   ├── processrunner.*        # 低层进程执行器
-│   ├── repositorymodel.*      # 仓库列表模型
-│   ├── repositoryproxymodel.* # 仓库过滤与搜索代理模型
-│   ├── gitstatusparser.h      # NUL 分隔状态解析
-│   ├── githistoryparser.h     # 提交历史结构化解析
-│   ├── gitqueries.h           # 纯 Git 命令参数定义
-│   ├── repositorycache.h      # 仓库状态快照与磁盘缓存
-│   └── discardplan.h          # 丢弃改动安全规划
-└── tests/                     # CTest C++ 单元测试与 QML 界面测试
+│   │   ├── navigation/            # Sidebar = ProjectSwitcher + RepositoryList/Row + BranchList + WorkspaceStatusCard
+│   │   ├── repositories/          # RepositoryDetailPane = RepositoryToolbar + OperationBanner + DiffToolbar
+│   │   │                          #   + ChangesFileList/CommitEditor/HistoryPane + CommandLogPopup + ConfirmDialogs
+│   │   └── overlays/              # 推送/拉取/分支/设置/错误弹窗
+│   └── components/                # 设计系统组件（见下）
+├── src/                           # C++ 控制器、Git/Gerrit 服务与解析器
+└── qa/                            # QML 视觉测试与源码约束检查
 ```
+
+### 设计系统组件（qml/components）
+
+| 组件 | 用途 |
+|------|------|
+| `Icon` + `Icons.js` | 矢量线性图标（24 栅格，圆角端点，参照 Lucide/ISC），替代 Unicode 符号 |
+| `PrimaryButton` | `kind`: filled / gray / tinted / plain / danger / dangerTinted，`compact` 小尺寸 |
+| `IconButton`、`FileActionButton`、`ToggleChip` | 工具栏图标按钮、行内操作、可勾选胶囊 |
+| `SegmentedControl` | iOS 分段控件（主视图切换、统一/左右 Diff） |
+| `SearchField` | iOS 搜索框（放大镜 + 清除按钮 + 尾部插槽） |
+| `Badge`、`Avatar`、`Spinner` | 胶囊徽标、作者头像、iOS 风格加载指示 |
+| `Banner`、`SectionHeader`、`SettingsGroup` | 语义提示条、分组标题、iOS 分组设置卡片 |
+| `AppDialog`、`FloatingSurface`、`AppMenu(Item)` | 弹窗/浮层（软阴影，软件渲染下同样可用）、菜单 |
+| `AppTextField`、`AppComboBox`、`AppRadioButton`、`AppSpinBox` | 统一样式的表单控件 |
+
+新增界面时优先组合以上组件，颜色只引用 `Theme` Token，不在页面中硬编码色值。
 
 ## 设计原则
 

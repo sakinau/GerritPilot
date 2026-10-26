@@ -100,313 +100,167 @@ ColumnLayout {
         }
     }
 
-    spacing: 4
+    spacing: 6
 
-    // Batch Action Toolbar
-    Rectangle {
+    // Toolbar: batch actions for checked files, or bulk actions for everything.
+    RowLayout {
         Layout.fillWidth: true
-        Layout.preferredHeight: 32
-        radius: 6
-        color: Theme.surface
-        border.color: Theme.separatorSoft
-        border.width: 1
+        Layout.preferredHeight: 28
+        spacing: 2
 
-        RowLayout {
-            anchors.fill: parent
-            anchors.leftMargin: 8
-            anchors.rightMargin: 8
-            spacing: 6
+        Text {
+            text: root.checkedFilesCount > 0 ? ("已选 " + root.checkedFilesCount + " 项") : "改动"
+            color: root.checkedFilesCount > 0 ? Theme.accent : Theme.text
+            font.pixelSize: Theme.fontSubheading
+            font.weight: Font.DemiBold
+            Layout.alignment: Qt.AlignVCenter
+        }
+        Badge {
+            visible: root.checkedFilesCount === 0 && root.displayedChanges.length > 0
+            text: root.displayedChanges.length
+            Layout.leftMargin: 4
+            Layout.alignment: Qt.AlignVCenter
+        }
 
-            // When files are checked
-            RowLayout {
-                visible: root.checkedFilesCount > 0
-                Layout.fillWidth: true
-                spacing: 6
+        Item { Layout.fillWidth: true }
 
-                Text {
-                    text: "已选 " + root.checkedFilesCount + " 项"
-                    color: Theme.accent
-                    font.pixelSize: Theme.fontCaption
-                    font.weight: Font.DemiBold
-                }
-
-                Item { Layout.fillWidth: true }
-
-                Button {
-                    id: stageCheckedBtn
-                    objectName: "stageSelectedFilesButton"
-                    text: "暂存选中"
-                    implicitHeight: 26
-                    implicitWidth: stageCheckedText.implicitWidth + 14
-                    padding: 0
-                    topInset: 0
-                    bottomInset: 0
-                    leftInset: 0
-                    rightInset: 0
-                    hoverEnabled: true
-                    visible: root.getCheckedUnstaged().length > 0
-                    enabled: root.workspace && !root.workspace.busy
-                    background: Rectangle {
-                        radius: 6
-                        color: stageCheckedBtn.down ? "#DCEBFA" : stageCheckedBtn.hovered ? Theme.accentSoft : "transparent"
-                    }
-                    contentItem: Text {
-                        id: stageCheckedText
-                        text: stageCheckedBtn.text
-                        color: Theme.accent
-                        font.pixelSize: Theme.fontCaption
-                        font.weight: Font.DemiBold
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                    }
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        acceptedButtons: Qt.NoButton
-                    }
-                    onClicked: {
-                        root.workspace.stageFiles(root.getCheckedUnstaged())
-                        root.clearCheckedFiles()
-                    }
-                }
-
-                Button {
-                    id: unstageCheckedBtn
-                    text: "取消暂存"
-                    implicitHeight: 26
-                    implicitWidth: unstageCheckedText.implicitWidth + 14
-                    padding: 0
-                    topInset: 0
-                    bottomInset: 0
-                    leftInset: 0
-                    rightInset: 0
-                    hoverEnabled: true
-                    visible: root.getCheckedStaged().length > 0
-                    enabled: root.workspace && !root.workspace.busy
-                    background: Rectangle {
-                        radius: 6
-                        color: unstageCheckedBtn.down ? "#DCEBFA" : unstageCheckedBtn.hovered ? Theme.accentSoft : "transparent"
-                    }
-                    contentItem: Text {
-                        id: unstageCheckedText
-                        text: unstageCheckedBtn.text
-                        color: Theme.accent
-                        font.pixelSize: Theme.fontCaption
-                        font.weight: Font.DemiBold
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                    }
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        acceptedButtons: Qt.NoButton
-                    }
-                    onClicked: {
-                        root.workspace.unstageFiles(root.getCheckedStaged())
-                        root.clearCheckedFiles()
-                    }
-                }
-
-                Button {
-                    id: discardCheckedBtn
-                    text: "丢弃已选"
-                    implicitHeight: 26
-                    implicitWidth: discardCheckedText.implicitWidth + 14
-                    padding: 0
-                    topInset: 0
-                    bottomInset: 0
-                    leftInset: 0
-                    rightInset: 0
-                    hoverEnabled: true
-                    visible: root.getCheckedUnstaged().length > 0
-                    enabled: root.workspace && !root.workspace.busy
-                    background: Rectangle {
-                        radius: 6
-                        color: discardCheckedBtn.down ? "#FDD" : discardCheckedBtn.hovered ? Theme.redSoft : "transparent"
-                    }
-                    contentItem: Text {
-                        id: discardCheckedText
-                        text: discardCheckedBtn.text
-                        color: Theme.red
-                        font.pixelSize: Theme.fontCaption
-                        font.weight: Font.DemiBold
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                    }
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        acceptedButtons: Qt.NoButton
-                    }
-                    onClicked: {
-                        root.discardRequested(root.getCheckedUnstaged())
-                        root.clearCheckedFiles()
-                    }
-                }
-
-                IconButton {
-                    glyph: "✕"
-                    toolTip: "取消多选"
-                    Layout.preferredWidth: 22
-                    Layout.preferredHeight: 22
-                    onClicked: root.clearCheckedFiles()
-                }
+        // When files are checked
+        PrimaryButton {
+            objectName: "stageSelectedFilesButton"
+            visible: root.checkedFilesCount > 0 && root.getCheckedUnstaged().length > 0
+            kind: "tinted"
+            compact: true
+            iconName: "plus"
+            text: "暂存"
+            toolTip: "暂存选中的文件"
+            enabled: root.workspace && !root.workspace.busy
+            onClicked: {
+                root.workspace.stageFiles(root.getCheckedUnstaged())
+                root.clearCheckedFiles()
             }
-
-            // When no files are checked
-            RowLayout {
-                visible: root.checkedFilesCount === 0
-                Layout.fillWidth: true
-                spacing: 4
-
-                Text {
-                    text: "改动文件"
-                    color: Theme.secondaryText
-                    font.pixelSize: Theme.fontCaption
-                    font.weight: Font.DemiBold
-                }
-
-                Item { Layout.fillWidth: true }
-
-                Button {
-                    id: stageAllBtn
-                    text: "＋ 暂存全部"
-                    implicitHeight: 26
-                    implicitWidth: stageAllText.implicitWidth + 14
-                    padding: 0
-                    topInset: 0
-                    bottomInset: 0
-                    leftInset: 0
-                    rightInset: 0
-                    hoverEnabled: true
-                    visible: root.getAllUnstaged().length > 0
-                    enabled: root.workspace && !root.workspace.busy
-                    background: Rectangle {
-                        radius: 6
-                        color: stageAllBtn.down ? "#DCEBFA" : stageAllBtn.hovered ? Theme.accentSoft : "transparent"
-                    }
-                    contentItem: Text {
-                        id: stageAllText
-                        text: stageAllBtn.text
-                        color: Theme.accent
-                        font.pixelSize: Theme.fontCaption
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                    }
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        acceptedButtons: Qt.NoButton
-                    }
-                    onClicked: root.workspace.stageFiles(root.getAllUnstaged())
-                }
-
-                Button {
-                    id: unstageAllBtn
-                    text: "− 取消全部"
-                    implicitHeight: 26
-                    implicitWidth: unstageAllText.implicitWidth + 14
-                    padding: 0
-                    topInset: 0
-                    bottomInset: 0
-                    leftInset: 0
-                    rightInset: 0
-                    hoverEnabled: true
-                    visible: root.getAllStaged().length > 0
-                    enabled: root.workspace && !root.workspace.busy
-                    background: Rectangle {
-                        radius: 6
-                        color: unstageAllBtn.down ? "#E4E5EB" : unstageAllBtn.hovered ? Theme.surfaceMuted : "transparent"
-                    }
-                    contentItem: Text {
-                        id: unstageAllText
-                        text: unstageAllBtn.text
-                        color: Theme.secondaryText
-                        font.pixelSize: Theme.fontCaption
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                    }
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        acceptedButtons: Qt.NoButton
-                    }
-                    onClicked: root.workspace.unstageFiles(root.getAllStaged())
-                }
-
-                Button {
-                    id: discardAllBtn
-                    text: "↶ 丢弃全部"
-                    implicitHeight: 26
-                    implicitWidth: discardAllText.implicitWidth + 14
-                    padding: 0
-                    topInset: 0
-                    bottomInset: 0
-                    leftInset: 0
-                    rightInset: 0
-                    hoverEnabled: true
-                    visible: root.getAllUnstaged().length > 0
-                    enabled: root.workspace && !root.workspace.busy
-                    background: Rectangle {
-                        radius: 6
-                        color: discardAllBtn.down ? "#FDD" : discardAllBtn.hovered ? Theme.redSoft : "transparent"
-                    }
-                    contentItem: Text {
-                        id: discardAllText
-                        text: discardAllBtn.text
-                        color: Theme.red
-                        font.pixelSize: Theme.fontCaption
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                    }
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        acceptedButtons: Qt.NoButton
-                    }
-                    onClicked: root.discardRequested(root.getAllUnstaged())
-                }
+        }
+        PrimaryButton {
+            visible: root.checkedFilesCount > 0 && root.getCheckedStaged().length > 0
+            kind: "plain"
+            compact: true
+            iconName: "minus"
+            text: "取消暂存"
+            enabled: root.workspace && !root.workspace.busy
+            onClicked: {
+                root.workspace.unstageFiles(root.getCheckedStaged())
+                root.clearCheckedFiles()
             }
+        }
+        PrimaryButton {
+            visible: root.checkedFilesCount > 0 && root.getCheckedUnstaged().length > 0
+            kind: "dangerTinted"
+            compact: true
+            iconName: "undo"
+            text: "丢弃"
+            toolTip: "丢弃选中文件的未暂存改动"
+            enabled: root.workspace && !root.workspace.busy
+            onClicked: {
+                root.discardRequested(root.getCheckedUnstaged())
+                root.clearCheckedFiles()
+            }
+        }
+        IconButton {
+            visible: root.checkedFilesCount > 0
+            iconName: "x"
+            toolTip: "取消多选"
+            implicitWidth: 26
+            implicitHeight: 26
+            onClicked: root.clearCheckedFiles()
+        }
+
+        // When no files are checked
+        PrimaryButton {
+            visible: root.checkedFilesCount === 0 && root.getAllUnstaged().length > 0
+            kind: "tinted"
+            compact: true
+            iconName: "plus"
+            text: "暂存全部"
+            enabled: root.workspace && !root.workspace.busy
+            onClicked: root.workspace.stageFiles(root.getAllUnstaged())
+        }
+        PrimaryButton {
+            visible: root.checkedFilesCount === 0 && root.getAllStaged().length > 0
+            kind: "plain"
+            compact: true
+            iconName: "minus"
+            text: "取消全部"
+            enabled: root.workspace && !root.workspace.busy
+            onClicked: root.workspace.unstageFiles(root.getAllStaged())
+        }
+        IconButton {
+            visible: root.checkedFilesCount === 0 && root.getAllUnstaged().length > 0
+            iconName: "undo"
+            destructive: true
+            toolTip: "丢弃全部未暂存改动"
+            implicitWidth: 26
+            implicitHeight: 26
+            enabled: root.workspace && !root.workspace.busy
+            onClicked: root.discardRequested(root.getAllUnstaged())
         }
     }
 
     ListView {
+        id: changesList
         Layout.fillWidth: true
         Layout.fillHeight: true
         ScrollBar.vertical: RightScrollBar { }
         model: root.displayedChanges
         clip: true
+        boundsBehavior: Flickable.StopAtBounds
 
         delegate: ItemDelegate {
             id: changeRow
             required property int index
             required property var modelData
             readonly property bool groupStart: index === 0 || !!(root.displayedChanges[index - 1] && changeRow.modelData && root.displayedChanges[index - 1].group !== changeRow.modelData.group)
-            width: ListView.view ? ListView.view.width : (parent ? parent.width : 0)
-            height: groupStart ? 66 : 36
-            topPadding: groupStart ? 30 : 0
+            readonly property string path: modelData ? modelData.path : ""
+            readonly property string fileName: path.slice(path.lastIndexOf("/") + 1)
+            readonly property string fileDir: path.indexOf("/") >= 0 ? path.slice(0, path.lastIndexOf("/")) : ""
+            readonly property string status: modelData && modelData.status ? modelData.status : ""
+            readonly property string statusCode: {
+                // VS Code convention: U = untracked, ! = conflict.
+                if (modelData && modelData.conflict) return "!"
+                const code = (status[0] && status[0] !== " ") ? status[0] : (status[1] || "")
+                return code === "?" ? "U" : code.trim()
+            }
+            readonly property color statusColor: modelData && modelData.conflict ? Theme.red
+                : statusCode === "A" || statusCode === "U" ? Theme.green
+                : statusCode === "D" ? Theme.red
+                : statusCode === "R" || statusCode === "C" ? Theme.purple
+                : Theme.orange
+            readonly property bool showActions: hovered || selectedFile
+            width: ListView.view ? ListView.view.width - 8 : (parent ? parent.width : 0)
+            height: groupStart ? 62 : 34
+            topPadding: groupStart ? 28 : 0
             bottomPadding: 0
+            leftPadding: 6
+            rightPadding: 4
             topInset: 0
             bottomInset: 0
+            hoverEnabled: true
             readonly property bool selectedFile: !!changeRow.modelData
                 && root.workspace.selectedFile === changeRow.modelData.path
                 && root.workspace.selectedFileStaged === changeRow.modelData.staged
             background: Rectangle {
-                y: changeRow.groupStart ? 30 : 0
-                height: 36
-                radius: 6
-                color: changeRow.selectedFile ? Theme.accentSoft : changeRow.hovered ? "#F8F9FA" : "transparent"
-                border.color: changeRow.selectedFile ? Theme.accent : changeRow.hovered ? Theme.separatorSoft : "transparent"
-                border.width: 1
+                y: changeRow.groupStart ? 28 : 0
+                height: 34
+                radius: Theme.radiusSmall + 1
+                color: changeRow.selectedFile ? Theme.accentTint : changeRow.hovered ? Theme.hoverFill : "transparent"
             }
 
             Text {
                 visible: changeRow.groupStart
                 text: changeRow.modelData ? changeRow.modelData.group : ""
-                x: 8; y: 5
-                font.pixelSize: Theme.fontSecondary
-                font.bold: true
-                color: Theme.secondaryText
+                x: 6; y: 8
+                font.pixelSize: Theme.fontCaption
+                font.weight: Font.DemiBold
+                font.letterSpacing: 0.4
+                color: Theme.tertiaryText
             }
 
             onClicked: {
@@ -415,14 +269,13 @@ ColumnLayout {
             }
 
             contentItem: RowLayout {
-                spacing: 4
+                spacing: 7
 
                 FlatCheckBox {
                     id: fileCheck
                     controlled: true
                     checked: !!(changeRow.modelData && root.checkedFiles[(changeRow.modelData.staged ? "S:" : "U:") + changeRow.modelData.path])
-                    Layout.preferredWidth: 18
-                    Layout.preferredHeight: 18
+                    Layout.preferredWidth: 16
                     Layout.alignment: Qt.AlignVCenter
                     onToggled: {
                         if (changeRow.modelData)
@@ -431,24 +284,55 @@ ColumnLayout {
                     }
                 }
 
-                Text {
-                    text: changeRow.modelData ? changeRow.modelData.status : ""
-                    color: (changeRow.modelData && changeRow.modelData.status && changeRow.modelData.status[0] !== " ") ? Theme.green : Theme.orange
-                    font.family: "DejaVu Sans Mono"
-                    font.pixelSize: Theme.fontCaption
-                    font.weight: Font.DemiBold
+                Rectangle {
+                    Layout.preferredWidth: 18
+                    Layout.preferredHeight: 18
+                    Layout.alignment: Qt.AlignVCenter
+                    radius: 5
+                    color: Qt.rgba(changeRow.statusColor.r, changeRow.statusColor.g, changeRow.statusColor.b, 0.14)
+                    Text {
+                        anchors.centerIn: parent
+                        text: changeRow.statusCode || "M"
+                        color: changeRow.statusColor
+                        font.family: Theme.monoFontFamily
+                        font.pixelSize: Theme.fontCaption
+                        font.weight: Font.Bold
+                    }
+                    HoverHandler { id: statusHover }
+                    ToolTip.visible: statusHover.hovered
+                    ToolTip.text: "Git 状态：" + changeRow.status
+                    ToolTip.delay: 500
                 }
 
-                Text {
-                    text: changeRow.modelData ? changeRow.modelData.path : ""
-                    color: Theme.text
-                    font.pixelSize: Theme.fontBody
-                    elide: Text.ElideMiddle
+                RowLayout {
                     Layout.fillWidth: true
+                    Layout.alignment: Qt.AlignVCenter
+                    spacing: 6
+                    Text {
+                        text: changeRow.fileName
+                        color: Theme.text
+                        font.pixelSize: Theme.fontBody
+                        font.weight: changeRow.selectedFile ? Font.DemiBold : Font.Normal
+                        elide: Text.ElideMiddle
+                        Layout.preferredWidth: implicitWidth
+                        Layout.minimumWidth: Math.min(implicitWidth, 60)
+                    }
+                    Text {
+                        visible: changeRow.fileDir.length > 0
+                        text: changeRow.fileDir
+                        color: Theme.tertiaryText
+                        font.pixelSize: Theme.fontCaption
+                        elide: Text.ElideLeft
+                        Layout.fillWidth: true
+                        Layout.preferredWidth: 0
+                        Layout.minimumWidth: 0
+                    }
+                    Item { Layout.fillWidth: true; visible: changeRow.fileDir.length === 0 }
                 }
 
                 FileActionButton {
-                    text: "↗"
+                    visible: changeRow.showActions
+                    iconName: "arrow-up-right"
                     toolTip: changeRow.modelData && changeRow.modelData.conflict
                         ? "打开冲突文件进行编辑" : "用默认应用打开文件"
                     enabled: !!changeRow.modelData
@@ -459,10 +343,10 @@ ColumnLayout {
                 }
 
                 FileActionButton {
-                    text: "↶"
+                    iconName: "undo"
                     toolTip: "丢弃未暂存改动"
                     destructive: true
-                    visible: !!changeRow.modelData && !changeRow.modelData.staged && !changeRow.modelData.conflict
+                    visible: changeRow.showActions && !!changeRow.modelData && !changeRow.modelData.staged && !changeRow.modelData.conflict
                     enabled: !root.workspace.busy && !!changeRow.modelData
                     onClicked: {
                         if (changeRow.modelData)
@@ -471,7 +355,9 @@ ColumnLayout {
                 }
 
                 FileActionButton {
-                    text: changeRow.modelData ? (changeRow.modelData.conflict ? "✓" : changeRow.modelData.staged ? "−" : "+") : ""
+                    // Conflict resolution stays visible: it is the next required step.
+                    visible: changeRow.showActions || (!!changeRow.modelData && changeRow.modelData.conflict)
+                    iconName: changeRow.modelData ? (changeRow.modelData.conflict ? "check" : changeRow.modelData.staged ? "minus" : "plus") : ""
                     toolTip: changeRow.modelData ? (changeRow.modelData.conflict ? "标记已解决" : changeRow.modelData.staged ? "取消暂存" : "暂存文件") : ""
                     enabled: !root.workspace.busy && !!changeRow.modelData
                     onClicked: {
@@ -485,6 +371,20 @@ ColumnLayout {
                         }
                     }
                 }
+            }
+        }
+
+        Column {
+            anchors.centerIn: parent
+            visible: changesList.count === 0
+            spacing: 8
+            readonly property bool hasRepository: root.workspace && root.workspace.selectedPath.length > 0
+            Icon { anchors.horizontalCenter: parent.horizontalCenter; name: parent.hasRepository ? "check-circle" : "folder"; size: 30; strokeWidth: 1.4; color: Theme.quaternaryText }
+            Text {
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: parent.hasRepository ? "工作区很干净" : "未选择仓库"
+                color: Theme.tertiaryText
+                font.pixelSize: Theme.fontSecondary
             }
         }
     }

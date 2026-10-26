@@ -39,29 +39,61 @@ set(GERRITPILOT_QML_FILES
     ../qml/Theme.qml
     ../qml/pages/WorkspacePage.qml
     ../qml/features/navigation/Sidebar.qml
+    ../qml/features/navigation/ProjectSwitcher.qml
+    ../qml/features/navigation/RepositoryList.qml
+    ../qml/features/navigation/RepositoryRow.qml
+    ../qml/features/navigation/BranchList.qml
+    ../qml/features/navigation/WorkspaceStatusCard.qml
     ../qml/features/navigation/ProjectManagerDialog.qml
     ../qml/features/overlays/ActionDialogs.qml
     ../qml/features/overlays/BranchPanel.qml
     ../qml/features/overlays/OperationErrorDialog.qml
     ../qml/features/overlays/SettingsPanel.qml
     ../qml/features/repositories/RepositoryDetailPane.qml
+    ../qml/features/repositories/RepositoryToolbar.qml
+    ../qml/features/repositories/OperationBanner.qml
+    ../qml/features/repositories/DiffToolbar.qml
+    ../qml/features/repositories/CommandLogPopup.qml
+    ../qml/features/repositories/RepositoryConfirmDialogs.qml
     ../qml/features/repositories/ChangesFileList.qml
     ../qml/features/repositories/CommitEditor.qml
     ../qml/features/repositories/StashDialog.qml
     ../qml/features/repositories/HistoryPane.qml
     ../qml/components/AppIcon.qml
     ../qml/components/AppDialog.qml
+    ../qml/components/AppComboBox.qml
+    ../qml/components/AppMenu.qml
+    ../qml/components/AppMenuItem.qml
+    ../qml/components/AppRadioButton.qml
+    ../qml/components/AppSpinBox.qml
+    ../qml/components/AppTextField.qml
+    ../qml/components/Avatar.qml
+    ../qml/components/Badge.qml
+    ../qml/components/Banner.qml
     ../qml/components/DiffView.qml
     ../qml/components/DiffParser.js
     ../qml/components/FlatCheckBox.qml
     ../qml/components/FileActionButton.qml
+    ../qml/components/FloatingSurface.qml
     ../qml/components/GlassCard.qml
+    ../qml/components/Icon.qml
+    ../qml/components/Icons.js
     ../qml/components/IconButton.qml
     ../qml/components/PrimaryButton.qml
     ../qml/components/CherryPickSkipAction.qml
     ../qml/components/RightScrollBar.qml
+    ../qml/components/SearchField.qml
+    ../qml/components/SectionHeader.qml
+    ../qml/components/SegmentedControl.qml
+    ../qml/components/SettingsGroup.qml
+    ../qml/components/Spinner.qml
+    ../qml/components/SplitHandleBar.qml
+    ../qml/components/ToggleChip.qml
 )
-foreach(file IN LISTS GERRITPILOT_QML_FILES)
+set(GERRITPILOT_RESOURCE_FILES
+    ../qml/assets/gerritpilot.svg
+)
+foreach(file IN LISTS GERRITPILOT_QML_FILES GERRITPILOT_RESOURCE_FILES)
     string(SUBSTRING "${file}" 3 -1 alias)
     set_source_files_properties(${file} PROPERTIES QT_RESOURCE_ALIAS "${alias}")
 endforeach()
@@ -72,6 +104,7 @@ qt_add_qml_module(gerritpilot
     VERSION 1.0
     OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/GerritPilot"
     QML_FILES ${GERRITPILOT_QML_FILES}
+    RESOURCES ${GERRITPILOT_RESOURCE_FILES}
 )
 
 set_target_properties(gerritpilot PROPERTIES
@@ -98,6 +131,7 @@ target_link_libraries(gerritpilot
         Qt6::Quick
         Qt6::QuickControls2
         Qt6::Network
+        Qt6::Svg
 )
 
 set_target_properties(gerritpilot PROPERTIES
@@ -115,6 +149,10 @@ install(TARGETS gerritpilot
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
 install(FILES "${PROJECT_SOURCE_DIR}/LICENSE" DESTINATION "${CMAKE_INSTALL_DATADIR}/licenses/GerritPilot")
+install(FILES "${PROJECT_SOURCE_DIR}/qml/assets/gerritpilot.svg"
+    DESTINATION "${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps")
+install(FILES "${PROJECT_SOURCE_DIR}/packaging/gerritpilot.desktop"
+    DESTINATION "${CMAKE_INSTALL_DATADIR}/applications")
 
 qt_generate_deploy_qml_app_script(
     TARGET gerritpilot
