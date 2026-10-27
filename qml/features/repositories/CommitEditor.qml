@@ -3,6 +3,7 @@ import QtQuick.Controls.Basic
 import QtQuick.Layouts
 import GerritPilot
 import "../../components"
+import "CommitIssues.js" as CommitIssues
 
 Item {
     id: root
@@ -28,49 +29,6 @@ Item {
                 workspace.saveCommitDraft(currentRepoPath, editor.text, currentWorkspacePath)
             }
         }
-    }
-
-    function formatMultipleIssues(rawText, defaultPrefix) {
-        if (!rawText || !rawText.trim()) return ""
-        var p = (defaultPrefix && defaultPrefix.trim().length > 0) ? defaultPrefix.trim() : "m-"
-        if (!p.endsWith("-")) p += "-"
-        var tokens = rawText.trim().split(/[,;，；\s]+/)
-        var list = []
-        for (var i = 0; i < tokens.length; ++i) {
-            var tok = tokens[i].trim()
-            if (!tok) continue
-            if (/^m-/i.test(tok)) {
-                tok = "m-" + tok.substring(2)
-            } else if (/^r-/i.test(tok)) {
-                tok = "r-" + tok.substring(2)
-            } else {
-                tok = p + tok
-            }
-            if (list.indexOf(tok) === -1) {
-                list.push(tok)
-            }
-        }
-        return list.join(",")
-    }
-
-    function switchIssuePrefix(rawText, targetPrefix) {
-        if (!rawText || !rawText.trim()) return ""
-        var target = targetPrefix.endsWith("-") ? targetPrefix : (targetPrefix + "-")
-        var tokens = rawText.trim().split(/[,;，；\s]+/)
-        var list = []
-        for (var i = 0; i < tokens.length; ++i) {
-            var tok = tokens[i].trim()
-            if (!tok) continue
-            if (/^(m|r)-/i.test(tok)) {
-                tok = target + tok.substring(2)
-            } else {
-                tok = target + tok
-            }
-            if (list.indexOf(tok) === -1) {
-                list.push(tok)
-            }
-        }
-        return list.join(",")
     }
 
     function switchDraft() {
@@ -111,8 +69,6 @@ Item {
         target: root.workspace
         ignoreUnknownSignals: true
         function onSelectedRepositoryChanged() {
-            aiDialog.generating = false
-            aiDialog.close()
             root.switchDraft()
         }
         function onLastCommitMessageReady(workspacePath, repositoryPath, message) {
@@ -134,326 +90,19 @@ Item {
                 amendCheck.checked = false
             }
         }
-        function onOperationError(error) {
-            if (aiDialog.opened && error.type === "ai"
-                && error.workspacePath === root.currentWorkspacePath
-                && error.repositoryPath === root.currentRepoPath
-                && error.generation === root.workspace.operationGeneration) {
-                aiDialog.generating = false
-                aiDialog.errorText = error.message
-            }
-        }
     }
 
-    Connections {
-        target: (root.workspace && root.workspace.commitAi) ? root.workspace.commitAi : null
-        function onCandidateReady(candidate) {
-            aiDialog.generating = false
-            aiDialog.close()
-            if (candidate && candidate.length > 0) {
-                editor.text = candidate
-                draftSaveTimer.restart()
-                root.resultText = "AI 提交说明已生成"
-            }
-        }
-        function onErrorOccurred(error) {
-            aiDialog.generating = false
-            aiDialog.errorText = error
-            root.resultText = "AI 生成提示: " + error
-        }
-    }
-
-    AppDialog {
+    AiCommitDialog {
         id: aiDialog
-        objectName: "aiCommitDialog"
-        preferredWidth: 500
-        title: "AI 生成提交说明"
-        standardButtons: Dialog.NoButton
-        closePolicy: generating ? Popup.NoAutoClose : Popup.CloseOnEscape
-        property bool generating: false
-        property string errorText: ""
-        property string issueTypePrefix: "m-"
-
-        onOpened: {
-            errorText = ""
-            issueTypePrefix = (aiTypeCombo.currentIndex === 0 ? "m-" : "r-")
-            aiScopeCombo.currentIndex = root.hasStagedFiles ? 0 : 1
+        workspace: root.workspace
+        existingMessage: editor.text
+        hasStagedFiles: root.hasStagedFiles
+        onCandidateAccepted: message => {
+            editor.text = message
+            draftSaveTimer.restart()
+            root.resultText = "AI 提交说明已生成"
         }
-
-        contentItem: ColumnLayout {
-            spacing: 12
-            Text {
-                text: "改动范围"
-                color: Theme.text
-                font.pixelSize: Theme.fontSecondary
-                font.weight: Font.DemiBold
-            }
-            AppComboBox {
-                id: aiScopeCombo
-                objectName: "aiScopeCombo"
-                Layout.fillWidth: true
-                model: ["仅暂存区", "整个当前仓库"]
-                enabled: !aiDialog.generating
-            }
-            Text {
-                Layout.fillWidth: true
-                text: aiScopeCombo.currentIndex === 0
-                    ? "只依据已暂存的文件生成。"
-                    : "包含已暂存、未暂存及可读取的未跟踪文本文件片段；提交前请核对暂存区，避免把未提交内容写进说明。"
-                wrapMode: Text.Wrap
-                color: Theme.secondaryText
-                font.pixelSize: Theme.fontCaption
-            }
-            Text {
-                text: "提交类型"
-                color: Theme.text
-                font.pixelSize: Theme.fontSecondary
-                font.weight: Font.DemiBold
-            }
-            AppComboBox {
-                id: aiTypeCombo
-                objectName: "aiTypeCombo"
-                Layout.fillWidth: true
-                readonly property var typeKeys: [
-                    "fix", "feat", "chg", "refactor", "docs", "style", "test", "chore", "add", "del", "merge"
-                ]
-                model: [
-                    "fix · 修复问题",
-                    "feat · 新增功能",
-                    "chg · 变更优化",
-                    "refactor · 代码重构",
-                    "docs · 文档修改",
-                    "style · 格式规范",
-                    "test · 测试用例",
-                    "chore · 杂项构建",
-                    "add · 新增模块/文件",
-                    "del · 删除废弃文件",
-                    "merge · 分支合并"
-                ]
-                enabled: !aiDialog.generating
-                onCurrentIndexChanged: aiDialog.issueTypePrefix = (currentIndex === 0 ? "m-" : "r-")
-            }
-            RowLayout {
-                Layout.fillWidth: true
-                Text {
-                    text: "关联单号（飞书项目强制绑定）"
-                    color: Theme.text
-                    font.pixelSize: Theme.fontSecondary
-                    font.weight: Font.DemiBold
-                }
-                Item { Layout.fillWidth: true }
-                SegmentedControl {
-                    compact: true
-                    model: ["m- 问题单", "r- 需求单"]
-                    currentIndex: aiDialog.issueTypePrefix === "m-" ? 0 : 1
-                    onActivated: index => {
-                        const prefix = index === 0 ? "m-" : "r-"
-                        const other = index === 0 ? /(?:^|[,;，；\s])r-/i : /(?:^|[,;，；\s])m-/i
-                        aiDialog.issueTypePrefix = prefix
-                        const t = aiIssueField.text.trim()
-                        if (t.length > 0 && other.test(t))
-                            aiIssueField.text = switchIssuePrefix(t, prefix)
-                    }
-                }
-            }
-            AppTextField {
-                id: aiIssueField
-                objectName: "aiIssueField"
-                Layout.fillWidth: true
-                enabled: !aiDialog.generating
-                placeholderText: aiDialog.issueTypePrefix === "m-"
-                    ? "输入问题单号（例如 7064369220，多个用逗号隔开；将自动补 m-）"
-                    : "输入需求单号（例如 7064369220，多个用逗号隔开；将自动补 r-）"
-                font.pixelSize: Theme.fontSecondary
-            }
-            Text {
-                Layout.fillWidth: true
-                readonly property string rawText: aiIssueField.text.trim()
-                readonly property string formattedText: formatMultipleIssues(rawText, aiDialog.issueTypePrefix)
-                readonly property bool allAlreadyPrefixed: {
-                    if (!rawText) return false
-                    var parts = rawText.split(/[,;，；\s]+/)
-                    for (var i = 0; i < parts.length; ++i) {
-                        var tok = parts[i].trim()
-                        if (tok && !/^(m|r)-/i.test(tok)) return false
-                    }
-                    return true
-                }
-                text: rawText.length === 0
-                    ? "⚠ 飞书项目与Gerrit门禁要求：必须关联单号（问题单 m- 或 需求单 r-），否则提交将被拦截"
-                    : (allAlreadyPrefixed
-                       ? ("✓ 单号格式有效: " + formattedText)
-                       : ("✓ 提交将自动补全前缀为 " + formattedText))
-                font.pixelSize: Theme.fontCaption
-                color: rawText.length === 0 ? Theme.orange : Theme.accent
-                wrapMode: Text.Wrap
-            }
-            Text {
-                text: aiDialog.issueTypePrefix === "m-" ? "双关联需求单 (r-，自主修复战役单)" : "伴随关联问题单 (m-，可选)"
-                color: Theme.text
-                font.pixelSize: Theme.fontSecondary
-                font.weight: Font.DemiBold
-            }
-            AppTextField {
-                id: aiSecondaryIssueField
-                objectName: "aiSecondaryIssueField"
-                Layout.fillWidth: true
-                enabled: !aiDialog.generating
-                placeholderText: aiDialog.issueTypePrefix === "m-"
-                    ? "输入关联需求单号（例如 7064369220，多个用逗号隔开；将自动补 r-）"
-                    : "输入关联问题单号（例如 7064369220，多个用逗号隔开；将自动补 m-）"
-                font.pixelSize: Theme.fontSecondary
-            }
-            Text {
-                Layout.fillWidth: true
-                readonly property string rawText: aiSecondaryIssueField.text.trim()
-                readonly property string targetPrefix: aiDialog.issueTypePrefix === "m-" ? "r-" : "m-"
-                readonly property string formattedText: formatMultipleIssues(rawText, targetPrefix)
-                visible: rawText.length > 0
-                text: "✓ 补充单号将作为 footer 关联: " + formattedText
-                font.pixelSize: Theme.fontCaption
-                color: Theme.accent
-                wrapMode: Text.Wrap
-            }
-            Text {
-                text: "改动目的"
-                color: Theme.text
-                font.pixelSize: Theme.fontSecondary
-                font.weight: Font.DemiBold
-            }
-            AppTextField {
-                id: aiPurposeField
-                objectName: "aiCommitPurpose"
-                Layout.fillWidth: true
-                maximumLength: 300
-                enabled: !aiDialog.generating
-                placeholderText: "改动目的（可选）：如按需求更新提示文案，不是修复显示异常"
-                font.pixelSize: Theme.fontSecondary
-            }
-            Text {
-                text: "编译验证"
-                color: Theme.text
-                font.pixelSize: Theme.fontSecondary
-                font.weight: Font.DemiBold
-            }
-            Rectangle {
-                Layout.fillWidth: true
-                Layout.preferredHeight: compileCol.implicitHeight + 14
-                radius: Theme.radiusMedium
-                color: Theme.surfaceGrouped
-
-                ColumnLayout {
-                    id: compileCol
-                    anchors.fill: parent
-                    anchors.margins: 8
-                    spacing: 6
-
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 8
-
-                        FlatCheckBox {
-                            id: aiManualCompileCheck
-                            objectName: "aiManualCompileCheck"
-                            text: "人工已验证编译通过"
-                            checked: false
-                            enabled: !aiDialog.generating
-                        }
-
-                        Item { Layout.fillWidth: true }
-
-                        Text {
-                            text: aiManualCompileCheck.checked ? "✓ 输出编译通过说明" : "未勾选时输出 - Not run"
-                            color: aiManualCompileCheck.checked ? Theme.accent : Theme.secondaryText
-                            font.pixelSize: Theme.fontCaption
-                        }
-                    }
-
-                    AppTextField {
-                        id: aiCompileNoteField
-                        objectName: "aiCompileNoteField"
-                        Layout.fillWidth: true
-                        visible: aiManualCompileCheck.checked
-                        enabled: !aiDialog.generating
-                        placeholderText: "编译目标或平台（可选，留空默认：本地已验证编译通过）"
-                        font.pixelSize: Theme.fontSecondary
-                    }
-                }
-            }
-            Text {
-                Layout.fillWidth: true
-                visible: aiScopeCombo.currentIndex === 1
-                text: "整个仓库的改动片段将发送给已配置的 AI 接口；请留意敏感文件。"
-                wrapMode: Text.Wrap
-                color: Theme.orange
-                font.pixelSize: Theme.fontCaption
-            }
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: 8
-                Spinner {
-                    objectName: "aiCommitBusyIndicator"
-                    Layout.preferredWidth: Theme.controlHeight * 0.7
-                    Layout.preferredHeight: Theme.controlHeight * 0.7
-                    visible: aiDialog.generating
-                    running: visible
-                }
-                Text {
-                    Layout.fillWidth: true
-                    text: aiDialog.errorText || (aiDialog.generating ? "正在读取改动并生成说明…" : "")
-                    visible: text.length > 0
-                    wrapMode: Text.Wrap
-                    color: aiDialog.errorText ? Theme.red : Theme.secondaryText
-                    font.pixelSize: Theme.fontSecondary
-                }
-            }
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: 8
-                Item { Layout.fillWidth: true }
-                PrimaryButton {
-                    text: aiDialog.generating ? "取消生成" : "关闭"
-                    kind: "gray"
-                    onClicked: {
-                        if (aiDialog.generating && root.workspace) {
-                            if (root.workspace.commitAi && root.workspace.commitAi.busy)
-                                root.workspace.commitAi.cancel()
-                            else if (root.workspace.busy && typeof root.workspace.stop === "function")
-                                root.workspace.stop()
-                        }
-                        aiDialog.generating = false
-                        aiDialog.close()
-                    }
-                }
-                PrimaryButton {
-                    objectName: "aiGenerateButton"
-                    text: "生成说明"
-                    enabled: !aiDialog.generating && root.workspace && !root.workspace.busy
-                             && !(root.workspace.commitAi && root.workspace.commitAi.busy)
-                    onClicked: {
-                        aiDialog.errorText = ""
-                        aiDialog.generating = true
-                        var typeKey = aiTypeCombo.typeKeys[aiTypeCombo.currentIndex] || "fix"
-                        var issueVal = aiIssueField.visible ? aiIssueField.text.trim() : ""
-                        if (issueVal.length > 0) {
-                            issueVal = formatMultipleIssues(issueVal, aiDialog.issueTypePrefix)
-                        }
-                        var secPrefix = (aiDialog.issueTypePrefix === "m-" ? "r-" : "m-")
-                        var secVal = aiSecondaryIssueField.text.trim()
-                        if (secVal.length > 0) {
-                            secVal = formatMultipleIssues(secVal, secPrefix)
-                        }
-                        root.workspace.generateCommitMessage(editor.text, aiScopeCombo.currentIndex,
-                                                             typeKey,
-                                                             issueVal,
-                                                             aiManualCompileCheck.checked,
-                                                             aiCompileNoteField.text.trim(),
-                                                             aiPurposeField.text.trim(),
-                                                             secVal)
-                    }
-                }
-            }
-        }
+        onGenerationFailed: message => root.resultText = "AI 生成提示: " + message
     }
 
     ColumnLayout {
@@ -525,48 +174,37 @@ Item {
             var line = lines.length > 0 ? lines[0].trim() : ""
             if (!line) return { hasIssues: false, allValid: false, detectedIds: "", rawBlock: "" }
 
-            var match = line.match(/^([A-Za-z0-9._\-]+(?:[,;，；\s]+[A-Za-z0-9._\-]+)*)(?=\s+[a-zA-Z]+(?:\([^\)]*\))?!?:|\s+|$)/)
-            if (!match) {
-                match = line.match(/^([A-Za-z0-9._\-]+(?:[,;，；\s]+[A-Za-z0-9._\-]+)*)/)
-            }
+            var match = line.match(/^([A-Za-z0-9._-]+(?:[,;，；]\s*[A-Za-z0-9._-]+)*)\s+([a-z]+)\([^)]*\):/i)
             if (!match) return { hasIssues: false, allValid: false, detectedIds: "", rawBlock: "" }
-
             var block = match[1].trim()
             var tokens = block.split(/[,;，；\s]+/)
-            var isIssueToken = function(tok) {
-                return /^(m|r)-[A-Za-z0-9]+/i.test(tok) || /^\d{3,}$/.test(tok)
+            var expectedPrefix = match[2].toLowerCase() === "fix" ? "m-" : "r-"
+            var allValid = tokens.every(function(token) {
+                return /^(m|r)-[0-9]{10}$/.test(token)
+                    && token.substring(2) !== "0000000000" && token.startsWith(expectedPrefix)
+            })
+            var req = raw.match(/^关联需求单:[ \t]*([^\r\n]+)$/m)
+            var bug = raw.match(/^关联问题单:[ \t]*([^\r\n]+)$/m)
+            var validFooter = function(value, prefix) {
+                if (!value) return false
+                var footerTokens = value[1].split(/[,;，；\s]+/).filter(function(token) { return token.length > 0 })
+                return footerTokens.length > 0 && footerTokens.every(function(token) {
+                    return new RegExp("^" + prefix + "[0-9]{10}$").test(token)
+                        && token.substring(2) !== "0000000000"
+                })
             }
-            var hasAnyIssue = false
-            for (var i = 0; i < tokens.length; ++i) {
-                if (isIssueToken(tokens[i])) {
-                    hasAnyIssue = true
-                    break
-                }
-            }
-            if (!hasAnyIssue) return { hasIssues: false, allValid: false, detectedIds: "", rawBlock: "" }
-
-            var allValid = true
-            var validIds = []
-            for (var j = 0; j < tokens.length; ++j) {
-                var tok = tokens[j].trim()
-                if (!tok) continue
-                if (/^(m|r)-[A-Za-z0-9]+/i.test(tok)) {
-                    validIds.push(tok.toLowerCase().startsWith("m-") ? ("m-" + tok.substring(2)) : ("r-" + tok.substring(2)))
-                } else {
-                    allValid = false
-                }
-            }
-            var hasReqTrailer = /(?:关联需求单|Requirement|Req):\s*r-[A-Za-z0-9]+/i.test(raw)
-            var hasBugTrailer = /(?:关联问题单|Bug|Issue):\s*m-[A-Za-z0-9]+/i.test(raw)
+            var hasReqTrailer = !!validFooter(req, "r-")
+            var hasBugTrailer = !!validFooter(bug, "m-")
             return {
                 hasIssues: true,
-                allValid: allValid && (validIds.length === tokens.length),
-                detectedIds: validIds.join(","),
+                allValid: allValid && (expectedPrefix !== "m-" || hasReqTrailer),
+                detectedIds: tokens.join(","),
                 rawBlock: block,
                 hasReqTrailer: hasReqTrailer,
                 hasBugTrailer: hasBugTrailer
             }
         }
+
         readonly property bool hasValidIssuePrefix: issueInfo.hasIssues && issueInfo.allValid
         readonly property string detectedIssuePrefixId: issueInfo.detectedIds
 
@@ -615,7 +253,7 @@ Item {
                     Layout.fillWidth: true
                     text: {
                         if (!mainContentCol.hasValidIssuePrefix) {
-                            return "缺少单号前缀（需以 m-实例ID 或 r-实例ID 开头），将被飞书项目/Gerrit门禁拦截"
+                            return "请核对 10 位非零单号和类型前缀；fix 还须关联需求单 footer"
                         }
                         var desc = "已关联飞书单号: " + mainContentCol.detectedIssuePrefixId
                         if (mainContentCol.issueInfo.hasReqTrailer) {
@@ -653,7 +291,7 @@ Item {
                             var defaultPrefix = (editor.text.indexOf("fix") !== -1 ? "m-" : "r-")
                             if (mainContentCol.issueInfo.hasIssues && mainContentCol.issueInfo.rawBlock) {
                                 var raw = mainContentCol.issueInfo.rawBlock
-                                var formatted = formatMultipleIssues(raw, defaultPrefix)
+                                var formatted = CommitIssues.formatMultipleIssues(raw, defaultPrefix)
                                 var currentText = editor.text
                                 var idx = currentText.indexOf(raw)
                                 if (idx === 0) {

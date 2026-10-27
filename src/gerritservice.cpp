@@ -144,6 +144,7 @@ bool GerritService::isHttpHookSource(const QString &source)
 void GerritService::downloadHook(const GitCommand &context, const QString &hookPath,
                                  const QString &temporaryPath)
 {
+    cancelHookDownload();
     GitCommand command = context;
     command.kind = GitCommandKind::InstallHook;
     command.hook.targetPath = hookPath;
@@ -155,7 +156,9 @@ void GerritService::downloadHook(const GitCommand &context, const QString &hookP
     request.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
                          QNetworkRequest::NoLessSafeRedirectPolicy);
     QNetworkReply *reply = m_network.get(request);
+    m_hookReply = reply;
     connect(reply, &QNetworkReply::finished, this, [this, reply, command] {
+        if (m_hookReply == reply) m_hookReply = nullptr;
         reply->deleteLater();
         QString error;
         if (reply->error() != QNetworkReply::NoError) {
@@ -174,6 +177,14 @@ void GerritService::downloadHook(const GitCommand &context, const QString &hookP
         }
         emit hookDownloadFinished(command, error.isEmpty(), error);
     });
+}
+
+void GerritService::cancelHookDownload()
+{
+    if (!m_hookReply) return;
+    auto *reply = m_hookReply.data();
+    m_hookReply = nullptr;
+    reply->abort();
 }
 
 GitCommand GerritService::createQueryRemoteBranchesCommand(int repoIndex, const QString &repoAbsPath,

@@ -11,12 +11,19 @@
 #include "gerritservice.h"
 #include "commitmessageaiservice.h"
 #include "projectmanager.h"
+#include "batchpushworkflow.h"
+#include "revisionworkflow.h"
+#include "aicommitworkflow.h"
+#include "hookworkflow.h"
+#include "reviewpushworkflow.h"
+#include "workingtreeworkflow.h"
+#include "synchronizationworkflow.h"
 
 #include <QObject>
 #include <QSet>
 #include <QTimer>
 
-class WorkspaceController final : public QObject
+class WorkspaceController final : public QObject, private WorkflowRepositoryAccess
 {
     Q_OBJECT
     Q_PROPERTY(GerritService* gerrit READ gerrit CONSTANT)
@@ -91,7 +98,7 @@ public:
 
     RepositoryModel *repositoryModelSource() { return &m_model; }
     RepositoryProxyModel *repositoryModel() { return &m_proxy; }
-    QString workspacePath() const { return m_workspacePath; }
+    QString workspacePath() const override { return m_workspacePath; }
     void setWorkspacePath(const QString &path);
     QString selectedName() const;
     QString selectedPath() const;
@@ -126,7 +133,7 @@ public:
     QString revisionFile() const { return m_revisionFile; }
     QString consoleText() const { return m_consoleText; }
     QString activeTask() const { return m_gitService.activeTask(); }
-    bool busy() const { return m_gitService.busy(); }
+    bool busy() const override { return m_gitService.busy() || m_hooks.busy(); }
     int repositoryCount() const { return m_model.rowCount(); }
     int changedRepositoryCount() const { return m_model.changedCount(); }
     int aheadRepositoryCount() const { return m_model.aheadCount(); }
@@ -199,7 +206,7 @@ public:
 
     // Batch push of the checked repositories with shared Gerrit options.
     QVariantList batchPushRows() const;
-    bool batchPushRunning() const { return m_batchRunning; }
+    bool batchPushRunning() const { return m_batchPush.running(); }
     Q_INVOKABLE void prepareBatchPush();
     Q_INVOKABLE void setBatchPushTarget(const QString &path, const QString &branch);
     Q_INVOKABLE void setBatchPushIncluded(const QString &path, bool included);
@@ -230,7 +237,7 @@ public:
     Q_INVOKABLE void discardHunk(int hunkIndex);
 
     // Stash & Conflict operations
-    Q_INVOKABLE QStringList stashList() const { return m_stashList; }
+    Q_INVOKABLE QStringList stashList() const { return m_workingTree.stashList(); }
     Q_INVOKABLE void loadStashList();
     Q_INVOKABLE void stashSave(const QString &message = QString(), bool includeUntracked = false);
     Q_INVOKABLE void stashPop(int index = 0, const QString &expectedSha = QString());
@@ -246,12 +253,12 @@ public:
     Q_INVOKABLE QString loadCommitDraft(const QString &repoPath = QString(), const QString &workspacePath = QString()) const;
     Q_INVOKABLE void saveCommitDraft(const QString &repoPath, const QString &text, const QString &workspacePath = QString());
 
-    bool hasCommitHook() const { return m_hasCommitHook; }
-    QString lastGerritReviewUrl() const { return m_lastGerritReviewUrl; }
-    int pushState() const { return m_pushState; }
-    QString pushStatusText() const { return m_pushStatusText; }
-    QString pushRepositoryKey() const { return m_pushRepositoryKey; }
-    bool isRepoWorkspace() const;
+    bool hasCommitHook() const { return m_hooks.hasHook(); }
+    QString lastGerritReviewUrl() const { return m_reviewPush.lastReviewUrl(); }
+    int pushState() const { return m_reviewPush.state(); }
+    QString pushStatusText() const { return m_reviewPush.statusText(); }
+    QString pushRepositoryKey() const { return m_reviewPush.repositoryKey(); }
+    bool isRepoWorkspace() const override;
     Q_INVOKABLE QString lastCommitMessage() const;
     Q_INVOKABLE void cherryPick(const QString &revision);
     Q_INVOKABLE void revertCommit(const QString &revision);
@@ -292,7 +299,13 @@ private slots:
     void onGitOutputReceived(const QByteArray &output, const QByteArray &errors);
 
 private:
-    enum class ErrorType { General, Ai, Upstream, Conflict, Hook, ChangeId };
+    using ErrorType = WorkflowErrorType;
+    WorkflowRepository activeRepositoryContext() const override;
+    WorkflowRepository repositoryContext(int index) const override;
+    WorkflowRepository repositoryContextByPath(const QString &path) const override;
+    QList<WorkflowRepository> checkedRepositoryContexts() const override;
+    quint64 workspaceGeneration() const override { return m_generation; }
+    void bindWorkflow(RepositoryWorkflow &workflow);
     void reportError(const QString &title, const QString &message, ErrorType type = ErrorType::General,
                      const QStringList &actions = {}, const GitCommand *command = nullptr);
     void applyRepositoryPaths(QStringList paths);
@@ -313,49 +326,17 @@ private:
     void cancelScheduledRefresh();
     void appendConsole(const QString &text);
     void appendConsoleProgress(const QString &progress);
-    void setPushStatus(int state, const QString &text);
-    void setLastGerritReviewUrl(const QString &url);
     QString absoluteRepositoryPath(int index) const;
     QStringList actionPaths(int scope = -1) const;
     void updateCommitHookStatus();
-    void setCommitHookStatus(bool installed);
-    void resumePendingCommitAfterHook();
-    void finishHookInstall(const GitCommand &completed);
-    void enqueueChangeFetch(GitCommand command);
-    void enqueueRewrite(const GitCommand &completed, const QString &output);
-    struct BatchPushRow {
-        QString path;
-        QString name;
-        QString branch;
-        QString remote;
-        QString target;
-        QString savedTarget;
-        QString manifestTarget;
-        QString manifestRevision;
-        QString state; // checking, ready, nothing, error, queued, pushing, success, failed, canceled
-        QString message;
-        QString url;
-        int commits = 0;
-        bool included = true;
-    };
-    int batchRowIndex(const QString &path) const;
-    void resolveBatchTargets(const QHash<QString, GerritService::ManifestTarget> &manifest);
-    void enqueueBatchPreflight(int row, bool execute);
-    void handleBatchPushResult(const GitCommandResult &result);
-    void finishBatchPushIfDone();
-    void resetBatchPush();
     void applyStatus(int index, const GitStatusParser::Snapshot &snapshot, bool persist = true);
-    bool isOwnRepositoryPath(int index, const QString &path) const;
-    QVariantList ownRepositoryFiles(int index, const QVariantList &files) const;
+    bool isOwnRepositoryPath(int index, const QString &path) const override;
+    QVariantList ownRepositoryFiles(int index, const QVariantList &files) const override;
     void rebuildGroupedChanges();
-    bool validateOwnFiles(const QStringList &paths);
-    bool prepareScopedStage(GitCommand &command);
     void enqueueRepositoryRefresh(int index, bool includeBranches);
     void refreshSelectedFile();
     void setDiffText(const QString &text);
     const DiffIndex &currentDiffIndex() const;
-    void executeDiscard(int repositoryIndex, const QStringList &paths, const QString &statusOutput);
-    void executeStashAction(const QString &action, int index, const QString &expectedSha, const QString &title);
 
     RepositoryModel m_model;
     RepositoryProxyModel m_proxy;
@@ -367,6 +348,14 @@ private:
     QString m_workspacePath;
     ProjectManager m_projectManager;
 
+    BatchPushWorkflow m_batchPush;
+    RevisionWorkflow m_revisions;
+    AiCommitWorkflow m_aiWorkflow;
+    HookWorkflow m_hooks;
+    ReviewPushWorkflow m_reviewPush;
+    WorkingTreeWorkflow m_workingTree;
+    SynchronizationWorkflow m_sync;
+
     QTimer m_refreshTimer;
     bool m_refreshPending = false;
     quint64 m_generation = 0;
@@ -374,16 +363,6 @@ private:
     quint64 m_enqueueOperationId = 0;
     QSet<int> m_unbornRepositories;
     quint64 m_diffRequest = 0;
-    quint64 m_aiRequest = 0;
-    QString m_aiExistingMessage;
-    QString m_aiCommitType;
-    QString m_aiIssueId;
-    QString m_aiSecondaryIssueId;
-    bool m_aiManualCompiled = false;
-    QString m_aiCompileNote;
-    QString m_aiPurpose;
-    QStringList m_aiChangedFiles;
-    QStringList m_aiUntrackedFiles;
     quint64 m_revisionRequest = 0;
     quint64 m_revisionFilesRequest = 0;
     QVariantList m_changedFiles;
@@ -414,38 +393,8 @@ private:
     QStringList m_ignoredRepositories;
     QString m_cachedWorkspacePath;
     QString m_cachedRepositoryPath;
-    struct StashEntry {
-        QString ref;
-        QString sha;
-        QString description;
-        QString repositoryPath;
-    };
-    QStringList m_stashList;
-    QList<StashEntry> m_stashEntries;
-    QString m_stashRepositoryPath;
     bool m_ignoreWhitespace = false;
     bool m_pullRebase = false;
-    QList<BatchPushRow> m_batchRows;
-    quint64 m_batchRequest = 0;
-    bool m_batchRunning = false;
-    GerritPushOptions m_batchPushOptions;
-    bool m_hasCommitHook = true;
-    QString m_repairChangeIdRevision;
-    struct PendingCommit {
-        bool valid = false;
-        QString workspacePath;
-        QString repositoryPath;
-        QString message;
-        bool amend = false;
-        bool stageAll = false;
-    };
-    PendingCommit m_pendingCommit;
-    bool m_resumePendingCommit = false;
-    QString m_lastGerritReviewUrl;
-    int m_pushState = 0; // 0 idle, 1 running, 2 confirmed, 3 failed/canceled
-    QString m_pushStatusText;
-    QString m_pushRepositoryKey;
-    quint64 m_pushOperationId = 0;
     int m_activeIndex = -1;
     QString m_lastCommitMessage;
     QString m_branchQueryRemote;

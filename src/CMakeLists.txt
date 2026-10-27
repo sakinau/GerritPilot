@@ -13,6 +13,7 @@ qt_add_executable(gerritpilot MANUAL_FINALIZATION
     commitcommandbuilder.h
     commitmessageaiservice.cpp
     commitmessageaiservice.h
+    commitmessagepolicy.h
     processrunner.cpp
     processrunner.h
     repositorymodel.cpp
@@ -21,6 +22,23 @@ qt_add_executable(gerritpilot MANUAL_FINALIZATION
     repositoryproxymodel.h
     workspacecontroller.cpp
     workspacecontroller.h
+    repositoryworkflow.h
+    repositorypaths.h
+    workingtreeworkflow.h
+    workingtreeworkflow.cpp
+    synchronizationworkflow.h
+    synchronizationworkflow.cpp
+    gerritworkflowutils.h
+    batchpushworkflow.cpp
+    batchpushworkflow.h
+    revisionworkflow.cpp
+    revisionworkflow.h
+    aicommitworkflow.cpp
+    aicommitworkflow.h
+    hookworkflow.cpp
+    hookworkflow.h
+    reviewpushworkflow.cpp
+    reviewpushworkflow.h
     gitservice.cpp
     gitservice.h
     workspacesettings.h
@@ -58,6 +76,8 @@ set(GERRITPILOT_QML_FILES
     ../qml/features/repositories/RepositoryConfirmDialogs.qml
     ../qml/features/repositories/ChangesFileList.qml
     ../qml/features/repositories/CommitEditor.qml
+    ../qml/features/repositories/AiCommitDialog.qml
+    ../qml/features/repositories/CommitIssues.js
     ../qml/features/repositories/StashDialog.qml
     ../qml/features/repositories/HistoryPane.qml
     ../qml/components/AppIcon.qml

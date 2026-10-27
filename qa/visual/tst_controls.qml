@@ -16,7 +16,18 @@ TestCase {
     when: windowShown
 
     QtObject {
+        id: mockAi
+        property bool busy: false
+        property string validationError: ""
+        function issueValidationError(type, issue, secondary) { return validationError }
+        signal candidateReady(string candidate)
+        signal errorOccurred(string message)
+        function cancel() { busy = false }
+    }
+
+    QtObject {
         id: mock
+        property var commitAi: mockAi
         property var groupedChanges: [{path: "example.cpp", staged: false, conflict: false, status: " M", group: "改动文件"}]
         property bool busy: false
         property bool detailsCached: false
@@ -70,7 +81,8 @@ TestCase {
         function installCommitHook(resume) { installedWithResume = resume }
         function skipCherryPick(revision) { skippedRevision = revision }
         function generateCommitMessage(message, scope, commitType, issueId, compiled, note, purpose, secondaryIssueId) {
-            generatedOptions = {message: message, scope: scope, commitType: commitType, issueId: issueId, purpose: purpose, secondaryIssueId: secondaryIssueId}
+            generatedOptions = {message: message, scope: scope, commitType: commitType, issueId: issueId,
+                manualCompiled: compiled, compileNote: note, purpose: purpose, secondaryIssueId: secondaryIssueId}
         }
         function configurePullUpstream(remoteName, branchName) {
             configuredUpstream = {remote: remoteName, branch: branchName}
@@ -445,24 +457,24 @@ TestCase {
         compare(scope.currentIndex, 1) // No staged files: default to the working tree.
         scope.currentIndex = 1
         type.currentIndex = 0
-        issue.text = "m-12345"
-        secIssue.text = "r-99999"
+        issue.text = "m-7114324437"
+        secIssue.text = "r-7118000461"
         const purpose = findChild(commit, "aiCommitPurpose")
         purpose.text = "按需求更新提示文案"
         mouseClick(generate)
         compare(mock.generatedOptions.scope, 1)
         compare(mock.generatedOptions.commitType, "fix")
-        compare(mock.generatedOptions.issueId, "m-12345")
-        compare(mock.generatedOptions.secondaryIssueId, "r-99999")
+        compare(mock.generatedOptions.issueId, "m-7114324437")
+        compare(mock.generatedOptions.secondaryIssueId, "r-7118000461")
         compare(mock.generatedOptions.purpose, "按需求更新提示文案")
         panel.generating = false
         type.currentIndex = 1
         compare(issue.visible, true)
-        issue.text = ""
+        issue.text = "r-7118000461"
         secIssue.text = ""
         mouseClick(generate)
         compare(mock.generatedOptions.commitType, "feat")
-        compare(mock.generatedOptions.issueId, "")
+        compare(mock.generatedOptions.issueId, "r-7118000461")
         compare(mock.generatedOptions.secondaryIssueId, "")
         purpose.text = ""
         panel.generating = false
@@ -482,6 +494,58 @@ TestCase {
         mock.selectedRepositoryChanged()
         tryCompare(panel, "opened", false)
         issue.text = ""
+    }
+
+    function test_aiServiceResultsReachEditor() {
+        const editor = findChild(commit, "commitMessage")
+        const original = editor.text
+        mouseClick(findChild(commit, "aiCommitButton"))
+        const panel = findChild(commit, "aiCommitDialog")
+        tryCompare(panel, "opened", true)
+        panel.generating = true
+        mockAi.errorOccurred("请求失败，保留原草稿")
+        compare(panel.generating, false)
+        compare(panel.errorText, "请求失败，保留原草稿")
+        compare(editor.text, original)
+        compare(panel.opened, true)
+        panel.generating = true
+        mockAi.candidateReady("m-7114324437 fix(sample): 更新说明")
+        tryCompare(panel, "opened", false)
+        compare(panel.generating, false)
+        compare(editor.text, "m-7114324437 fix(sample): 更新说明")
+        compare(commit.resultText, "AI 提交说明已生成")
+        editor.text = original
+        commit.resultText = ""
+    }
+
+    function test_aiValidationAndManualVerification() {
+        mouseClick(findChild(commit, "aiCommitButton"))
+        const panel = findChild(commit, "aiCommitDialog")
+        const generate = findChild(commit, "aiGenerateButton")
+        const compiled = findChild(commit, "aiManualCompileCheck")
+        const note = findChild(commit, "aiCompileNoteField")
+        tryCompare(panel, "opened", true)
+        compare(compiled.checked, false)
+        mockAi.validationError = "修复提交必须关联需求单"
+        compare(generate.enabled, false)
+        const previous = mock.generatedOptions
+        mouseClick(generate)
+        compare(mock.generatedOptions, previous)
+        compare(panel.generating, false)
+        mockAi.validationError = ""
+        compare(generate.enabled, true)
+        compiled.checked = true
+        note.text = "Linux Debug"
+        mouseClick(generate)
+        compare(mock.generatedOptions.manualCompiled, true)
+        compare(mock.generatedOptions.compileNote, "Linux Debug")
+        panel.generating = false
+        panel.close()
+        panel.open()
+        tryCompare(panel, "opened", true)
+        compare(compiled.checked, false)
+        compare(note.text, "")
+        panel.close()
     }
 
     function test_draftStorageAndInFlightEdits() {

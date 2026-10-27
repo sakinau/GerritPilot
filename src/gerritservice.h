@@ -3,6 +3,7 @@
 #include "gitservice.h"
 #include <QHash>
 #include <QNetworkAccessManager>
+#include <QPointer>
 #include <QObject>
 #include <QRegularExpression>
 #include <QString>
@@ -29,6 +30,7 @@ public:
     // HTTP(S) remotes download /tools/hooks/commit-msg instead of using scp.
     static bool isHttpHookSource(const QString &source);
     void downloadHook(const GitCommand &context, const QString &hookPath, const QString &temporaryPath);
+    void cancelHookDownload();
 
     // Remote Branches & Push target
     GitCommand createQueryRemoteBranchesCommand(int repoIndex, const QString &repoAbsPath,
@@ -73,4 +75,5 @@ signals:
 
 private:
     QNetworkAccessManager m_network;
+    QPointer<QNetworkReply> m_hookReply;
 };

@@ -35,14 +35,15 @@ assert(service.includes('command.stopOnFailure = kind != GitCommandKind::HookSta
 const commit = section('void WorkspaceController::commitActive(', 'void WorkspaceController::generateCommitMessage(');
 assert(commit.indexOf('GitCommandKind::HookCommitPreflight') < commit.indexOf('enqueue(stageCommand)'));
 assert(commit.indexOf('GitCommandKind::HookCommitPreflight') < commit.indexOf('enqueue(commitCommand)'));
-const repair = section('void WorkspaceController::repairLastCommitChangeId(', 'void WorkspaceController::checkoutBranch(');
+const review = read('src/reviewpushworkflow.cpp');
+const repair = review.slice(review.indexOf('void ReviewPushWorkflow::repairLastCommitChangeId('), review.indexOf('void ReviewPushWorkflow::setLastGerritReviewUrl('));
 assert(repair.indexOf('GitCommandKind::HookRepairPreflight') < repair.indexOf('enqueue(command)'));
-const hookResult = section('    if (completed.kind == GitCommandKind::HookStatus', '    if (completed.kind == GitCommandKind::RepoList)');
-assert(hookResult.includes('completed.repositoryIndex != m_activeIndex'));
-assert(hookResult.includes('completed.repositoryPath != selectedPath()'));
+const hookResult = read('src/hookworkflow.cpp');
+assert(hookResult.includes('completed.repositoryIndex != repository.index'));
+assert(hookResult.includes('completed.repositoryPath != repository.path'));
 assert(hookResult.includes('QDir::isAbsolutePath(path)'));
 assert(hookResult.includes('hook.isFile() && hook.isExecutable()'));
-assert(hookResult.includes('m_gitService.cancelOperation(completed.operationId)'));
+assert(hookResult.includes('emit cancelOperationRequested(completed.operationId)'));
 assert(queue.includes('if (m_queue.at(i).kind == GitCommandKind::HookStatus)'));
 assert(!read('src/projectmanager.cpp').includes('m_controller->refreshAll()'));
 const loaded = section('void WorkspaceController::applyRepositoryPaths(', 'void WorkspaceController::refreshAll(');
@@ -78,7 +79,8 @@ assert(!cpp.includes('m_diffText.clear()'));
 assert.equal((cpp.match(/m_diffText = /g) || []).length, 1);
 const diffIndex = section('const DiffIndex &WorkspaceController::currentDiffIndex()', 'void WorkspaceController::stageHunk(');
 assert(diffIndex.includes('if (!m_diffIndexValid)') && diffIndex.includes('m_diffIndexValid = true'));
-assert.equal((cpp.match(/DiffModel::patch\(m_diffText, file, hunkIndex\)/g) || []).length, 3);
+const workingTree = read('src/workingtreeworkflow.cpp');
+assert.equal((workingTree.match(/DiffModel::patch\(/g) || []).length, 1);
 const diffModel = read('src/diffmodel.h');
 const metadata = diffModel.slice(diffModel.indexOf('static DiffIndex index('), diffModel.indexOf('static QString patch('));
 assert(!metadata.includes('.split(') && !metadata.includes('.patch'));
@@ -113,13 +115,26 @@ const drafts = section('QString WorkspaceController::loadCommitDraft(', 'void Wo
 assert(drafts.includes('WorkspaceSettings::loadDraft(ws,') && drafts.includes('WorkspaceSettings::saveDraft(ws,'));
 assert.equal((cpp.match(/WorkspaceSettings::clearSubmittedDraft\(/g) || []).length, 1);
 assert.equal((cpp.match(/emit commitSucceeded\(/g) || []).length, 1);
-const skip = section('    case GitCommandKind::CherryPickSkipPreflight:', '    case GitCommandKind::HookStatus:');
-assert(skip.includes('!snapshot.files.isEmpty()') && skip.includes('completed.revision != pendingCherryPickRevision()'));
+const skip = workingTree.slice(workingTree.indexOf('    case GitCommandKind::CherryPickSkipPreflight: {'), workingTree.indexOf('    case GitCommandKind::CommitScopePreflight: {'));
+assert(skip.includes('!snapshot.files.isEmpty()') && skip.includes('completed.revision != repository.cherryPickRevision'));
 assert(skip.includes('QStringLiteral("--skip")') && !skip.includes('--allow-empty'));
 assert(read('qml/components/CherryPickSkipAction.qml').includes('confirmation.revision === workspace.pendingCherryPickRevision'));
 const ai = read('src/commitmessageaiservice.cpp');
-assert(ai.includes('QStringLiteral("m-0")') && ai.includes('QStringLiteral("m-")'));
-assert(ai.includes('changes.size() > 3') && ai.includes('title.size() > 72'));
+assert(!ai.includes('QStringLiteral("m-0")') && ai.includes("CommitMessagePolicy::prepareIssues("));
+assert(ai.includes('changes.size() > 6') && ai.includes('title.size() > 72'));
 assert(ai.includes('document.isObject()') && ai.includes('m_lastCandidate.isEmpty()'));
-assert(ai.includes('purpose.trimmed().left(300)') && cpp.includes('m_aiPurpose = purpose.trimmed().left(300)'));
+assert(ai.includes('purpose.trimmed().left(300)') && read('src/aicommitworkflow.cpp').includes('m_aiPurpose = purpose.trimmed().left(300)'));
 console.log('PASS: source references, async Hook guards, repository isolation, bounded caches, lazy Diff, single state ownership, named metadata, structured errors, stateless commit builder');
+
+// Domain state must not migrate back into the facade or bypass its queue bridge.
+for (const name of ['batchpush', 'revision', 'reviewpush', 'aicommit', 'hook', 'workingtree', 'synchronization']) {
+    const workflow = read('src/' + name + 'workflow.cpp');
+    assert(!workflow.includes('#include "workspacecontroller.h"'));
+    assert(!/\bQProcess\b|waitForFinished|waitForStarted/.test(workflow));
+}
+for (const state of ['m_batchRows', 'm_aiRequest', 'm_pendingCommit', 'm_stashEntries', 'm_pushOperationId'])
+    assert(!read('src/workspacecontroller.h').includes(state), 'Duplicated workflow state: ' + state);
+assert(cpp.includes('command.operationId ? command.operationId : ++m_nextOperationId'));
+assert(cpp.includes('command.generation != m_generation'));
+assert(read('src/workspacecontroller.h').includes('m_gitService.busy() || m_hooks.busy()'));
+console.log('PASS: workflow state ownership, read-only repository port, single command bridge, HTTP Hook busy state');

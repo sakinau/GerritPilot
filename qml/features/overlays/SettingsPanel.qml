@@ -176,12 +176,12 @@ Popup {
                             }
                         }
                     }
-                    AppTextField {
+                    Text {
                         Layout.fillWidth: true
-                        font.pixelSize: Theme.fontBody
-                        text: root.workspace && root.workspace.commitAi ? root.workspace.commitAi.issuePrefix : ""
-                        placeholderText: "纯数字单号前缀（留空默认 m-；无单号使用 m-0）"
-                        onEditingFinished: if (root.workspace && root.workspace.commitAi) root.workspace.commitAi.issuePrefix = text.trim()
+                        text: "smart-commit v2.0：问题单 m- / 需求单 r-，单号须为 10 位且不能全为 0；修复提交必须双关联需求单。"
+                        color: Theme.secondaryText
+                        font.pixelSize: Theme.fontSecondary
+                        wrapMode: Text.Wrap
                     }
                     FlatCheckBox {
                         text: "记住 API Key（明文保存在本机设置中）"
