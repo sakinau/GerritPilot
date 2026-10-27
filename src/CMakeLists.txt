@@ -158,6 +158,7 @@ target_link_libraries(gerritpilot
 set_target_properties(gerritpilot PROPERTIES
     MACOSX_BUNDLE TRUE
     WIN32_EXECUTABLE TRUE
+    INSTALL_RPATH "$ORIGIN:$ORIGIN/../lib"
 )
 
 include(GNUInstallDirs)

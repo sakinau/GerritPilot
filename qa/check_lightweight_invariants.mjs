@@ -12,6 +12,7 @@ assert(executable.includes('qt_import_plugins(gerritpilot EXCLUDE_BY_TYPE qmltoo
 assert(executable.indexOf('qt_import_plugins(') < executable.indexOf('qt_finalize_executable('));
 assert(!executable.includes('EXCLUDE_PLUGIN_TYPES') && !executable.includes('NO_DEFAULT'));
 assert(executable.includes('RUNTIME_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}"'));
+assert(executable.includes('INSTALL_RPATH "$ORIGIN:$ORIGIN/../lib"'));
 assert(executable.includes('add_custom_command(TARGET gerritpilot POST_BUILD'));
 assert(!cmake.includes('add_custom_command(TARGET gerritpilot POST_BUILD'));
 assert(executable.includes('qt_add_qml_module(gerritpilot') && !cmake.includes('qt_add_qml_module('));
