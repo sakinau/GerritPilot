@@ -18,6 +18,7 @@ Rectangle {
     signal pushRequested()
     signal commandLogRequested()
     signal stashRequested()
+    signal changeDownloadRequested()
 
     implicitHeight: 54
     color: Theme.toolbar
@@ -140,6 +141,13 @@ Rectangle {
             }
             IconButton {
                 visible: !root.compactActions
+                iconName: "download"
+                toolTip: "下载 Gerrit Change（评审或接手他人的改动）"
+                enabled: root.workspace && !root.workspace.busy && root.hasRepository
+                onClicked: root.changeDownloadRequested()
+            }
+            IconButton {
+                visible: !root.compactActions
                 iconName: "archive"
                 toolTip: "贮藏管理"
                 enabled: root.workspace && !root.workspace.busy && root.hasRepository
@@ -169,6 +177,12 @@ Rectangle {
                 onClicked: repositoryMenu.popup(0, height + 4)
                 AppMenu {
                     id: repositoryMenu
+                    AppMenuItem {
+                        text: "下载 Gerrit Change…"
+                        iconName: "download"
+                        enabled: root.hasRepository && root.workspace && !root.workspace.busy
+                        onTriggered: root.changeDownloadRequested()
+                    }
                     AppMenuItem {
                         text: "贮藏管理…"
                         iconName: "archive"

@@ -25,7 +25,8 @@ Banner {
         : workspace && workspace.canSkipCherryPick
             ? "当前拣选没有剩余改动，可跳过当前提交或终止"
             : (operationLabel + "已无未解决冲突，可以继续或终止")
-    message: hasConflicts ? "在左侧点击 ↗ 打开冲突文件编辑并保存，再点击 ✓ 标记为已解决。" : ""
+    message: hasConflicts ? "在左侧点击 ↗ 打开冲突文件编辑并保存，再点击 ✓ 标记为已解决。"
+        : opName === "rebase" ? "如需修改停留的提交：改好文件并暂存后，在提交面板勾选“修订”提交，再点击继续。" : ""
 
     // Flow is right-to-left: the first child is the rightmost action.
     PrimaryButton {

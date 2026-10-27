@@ -17,6 +17,7 @@
 #include <QTemporaryFile>
 #include <QTextStream>
 #include <QUrl>
+#include <algorithm>
 #include <utility>
 
 namespace {
@@ -39,13 +40,57 @@ QString normalizedPath(QString path)
     return path;
 }
 
-QStringList dailyPullArguments(const QString &remote, const QString &remoteRef)
+QStringList dailyPullArguments(const QString &remote, const QString &remoteRef, bool rebase)
 {
-    QStringList args{QStringLiteral("pull"), QStringLiteral("--ff-only")};
+    // Gerrit chains keep their Change-Id trailers through a rebase; a merge commit would not be reviewable.
+    QStringList args{QStringLiteral("pull"), rebase ? QStringLiteral("--rebase") : QStringLiteral("--ff-only")};
     if (!remote.isEmpty() && !remoteRef.isEmpty()) {
         args.append({QStringLiteral("--no-tags"), QStringLiteral("--"), remote, remoteRef});
     }
     return args;
+}
+
+GerritPushOptions pushOptionsFromMap(const QVariantMap &map)
+{
+    GerritPushOptions options;
+    options.topic = map.value(QStringLiteral("topic")).toString().trimmed();
+    options.reviewers = GerritService::splitList(map.value(QStringLiteral("reviewers")).toString());
+    options.cc = GerritService::splitList(map.value(QStringLiteral("cc")).toString());
+    options.hashtags = GerritService::splitList(map.value(QStringLiteral("hashtags")).toString());
+    const int workState = map.value(QStringLiteral("workState")).toInt();
+    options.workState = workState == 1 ? GerritPushOptions::WorkInProgress
+        : workState == 2 ? GerritPushOptions::ReadyForReview : GerritPushOptions::KeepWorkState;
+    options.privateChange = map.value(QStringLiteral("private")).toBool();
+    options.message = map.value(QStringLiteral("message")).toString().simplified();
+    return options;
+}
+
+struct PendingCommits {
+    int count = 0;
+    QStringList missingChangeId;
+};
+
+// Parses `git log --format=%H%x00%B%x00 <target>..HEAD`.
+PendingCommits scanPendingCommits(const QString &output)
+{
+    static const QRegularExpression changeIdLine(
+        QStringLiteral("(?m)^Change-Id:[ \\t]*I[0-9a-fA-F]{40}[ \\t]*$"));
+    static const QRegularExpression commitHash(QStringLiteral("^[0-9a-fA-F]{40,64}$"));
+    PendingCommits pending;
+    const QStringList records = output.split(QChar(0));
+    for (int i = 0; i + 1 < records.size(); i += 2) {
+        const QString sha = records.at(i).trimmed();
+        if (!commitHash.match(sha).hasMatch()) continue;
+        ++pending.count;
+        if (!changeIdLine.match(records.at(i + 1)).hasMatch())
+            pending.missingChangeId.append(sha.left(10));
+    }
+    return pending;
+}
+
+bool isDetachedBranch(const QString &branch)
+{
+    return branch == QStringLiteral("(detached)") || branch == QStringLiteral("detached");
 }
 
 QString untrackedAiPreview(const QString &repository, const QStringList &paths)
@@ -120,6 +165,24 @@ WorkspaceController::WorkspaceController(QObject *parent)
         m_repositoryWatcher.setSuspended(busy());
         if (m_refreshPending && !busy() && !m_refreshTimer.isActive())
             m_refreshTimer.start();
+    });
+
+    connect(&m_gerrit, &GerritService::hookDownloadFinished, this,
+            [this](const GitCommand &context, bool success, const QString &error) {
+        if (context.generation != m_generation) {
+            QFile::remove(context.hook.temporaryPath);
+            return;
+        }
+        if (!success) {
+            QFile::remove(context.hook.temporaryPath);
+            m_resumePendingCommit = false;
+            reportError(tr("无法安装 Hook"),
+                error + tr("\n\n也可以在浏览器打开该地址下载，保存为仓库的 .git/hooks/commit-msg 并添加可执行权限。"),
+                ErrorType::Hook, {}, &context);
+            return;
+        }
+        appendConsole(tr("已从 %1 下载 Change-Id Hook。\n").arg(context.hook.source));
+        finishHookInstall(context);
     });
 
     loadSettings();
@@ -233,6 +296,28 @@ void WorkspaceController::setTopic(const QString &value)
     m_repositoryConfig.topic = value.trimmed(); emit settingsChanged(); saveSettings();
 }
 
+void WorkspaceController::setReviewers(const QString &value)
+{
+    const QString list = GerritService::splitList(value).join(QStringLiteral(", "));
+    if (m_repositoryConfig.reviewers == list) return;
+    m_repositoryConfig.reviewers = list; emit settingsChanged(); saveSettings();
+}
+
+void WorkspaceController::setCc(const QString &value)
+{
+    const QString list = GerritService::splitList(value).join(QStringLiteral(", "));
+    if (m_repositoryConfig.cc == list) return;
+    m_repositoryConfig.cc = list; emit settingsChanged(); saveSettings();
+}
+
+void WorkspaceController::setPullRebase(bool value)
+{
+    if (m_pullRebase == value) return;
+    m_pullRebase = value;
+    QSettings().setValue(QStringLiteral("pullRebase"), value);
+    emit pullRebaseChanged();
+}
+
 void WorkspaceController::setRequireChangeIdHook(bool required)
 {
     if (busy() || m_activeIndex < 0 || m_repositoryConfig.requireChangeIdHook == required) return;
@@ -271,6 +356,7 @@ void WorkspaceController::loadSettings()
 {
     QSettings settings;
     m_workspacePath = settings.value(QStringLiteral("workspace")).toString();
+    m_pullRebase = settings.value(QStringLiteral("pullRebase"), false).toBool();
 
     WorkspaceSettings::migrateLegacySettings(m_workspacePath);
     loadRepositorySettings();
@@ -428,6 +514,7 @@ void WorkspaceController::scanWorkspace()
     ++m_generation;
     m_gitService.setGeneration(m_generation);
     m_gitService.clearQueue();
+    resetBatchPush();
     if (isRepoWorkspace()) {
         GitCommand command;
         command.program = QStringLiteral("repo");
@@ -739,17 +826,19 @@ QString WorkspaceController::syncPreview(int scope, int method) const
         args.append(paths);
         return GitService::displayCommand(QStringLiteral("repo"), args);
     }
+    const QString pullCommand = m_pullRebase ? QStringLiteral("git pull --rebase")
+                                             : QStringLiteral("git pull --ff-only");
     if (scope == 0 || paths.size() == 1) {
         const int index = paths.isEmpty() ? -1 : m_model.indexOfPath(paths.first());
         const QString targetName = (index >= 0) ? m_model.nameAt(index) : QString();
         const QString branch = (index >= 0) ? m_model.branchAt(index) : QString();
-        QString desc = QStringLiteral("git pull --ff-only");
+        QString desc = pullCommand;
         if (!targetName.isEmpty()) {
             desc += QStringLiteral(" (%1%2)").arg(targetName, branch.isEmpty() ? QString() : QStringLiteral(" · %1").arg(branch));
         }
         return desc;
     }
-    return QStringLiteral("git pull --ff-only") + tr("（共 %1 个仓库）").arg(paths.size());
+    return pullCommand + tr("（共 %1 个仓库）").arg(paths.size());
 }
 
 void WorkspaceController::syncSelection(int scope)
@@ -782,11 +871,18 @@ void WorkspaceController::syncSelection(int scope)
     for (const QString &path : paths) {
         const int index = m_model.indexOfPath(path);
         if (index >= 0) {
-            enqueueGit(index,
-                       {QStringLiteral("for-each-ref"),
-                        QStringLiteral("--format=%(HEAD)%00%(upstream:remotename)%00%(upstream:remoteref)"),
-                        QStringLiteral("refs/heads/")},
-                       tr("解析拉取上游 %1").arg(m_model.nameAt(index)), GitCommandKind::PullTarget, true);
+            GitCommand command;
+            command.arguments = {QStringLiteral("for-each-ref"),
+                QStringLiteral("--format=%(HEAD)%00%(upstream:remotename)%00%(upstream:remoteref)"),
+                QStringLiteral("refs/heads/")};
+            command.workingDirectory = absoluteRepositoryPath(index);
+            command.repositoryIndex = index;
+            command.repositoryPath = path;
+            command.title = tr("解析拉取上游 %1").arg(m_model.nameAt(index));
+            command.kind = GitCommandKind::PullTarget;
+            command.stopOnFailure = true;
+            command.target.pullRebase = m_pullRebase;
+            enqueue(command);
         }
     }
 }
@@ -1052,12 +1148,31 @@ void WorkspaceController::generateCommitMessage(const QString &existingMessage, 
 
 QString WorkspaceController::pushPreview() const
 {
-    return GerritService::pushPreview(m_repositoryConfig.remote,
-                                      m_repositoryConfig.targetBranch,
-                                      m_repositoryConfig.topic);
+    GerritPushOptions options;
+    options.topic = m_repositoryConfig.topic;
+    options.reviewers = GerritService::splitList(m_repositoryConfig.reviewers);
+    options.cc = GerritService::splitList(m_repositoryConfig.cc);
+    return GerritService::pushPreview(m_repositoryConfig.remote, m_repositoryConfig.targetBranch, options);
 }
 
-void WorkspaceController::pushActive()
+QString WorkspaceController::pushCommandPreview(const QString &remote, const QString &branch,
+                                                const QVariantMap &options) const
+{
+    if (branch.trimmed().isEmpty()) return tr("未指定目标分支");
+    const QString error = pushOptionsError(options);
+    if (!error.isEmpty()) return error;
+    return GerritService::pushPreview(remote.trimmed().isEmpty() ? QStringLiteral("origin") : remote.trimmed(),
+                                      branch, pushOptionsFromMap(options));
+}
+
+QString WorkspaceController::pushOptionsError(const QVariantMap &options) const
+{
+    QString error;
+    GerritService::validatePushOptions(pushOptionsFromMap(options), &error);
+    return error;
+}
+
+void WorkspaceController::pushActive(const QVariantMap &extraOptions)
 {
     if (busy()) { reportError(tr("无法上传"), tr("请等待当前任务完成。")); return; }
     const QScopedValueRollback<quint64> operation(m_enqueueOperationId, ++m_nextOperationId);
@@ -1076,9 +1191,15 @@ void WorkspaceController::pushActive()
                              tr("目标分支包含 Gerrit 不接受的字符。"));
         return;
     }
-    QString topicError;
-    if (!GitService::validateTopicName(m_repositoryConfig.topic, &topicError)) {
-        reportError(tr("Topic 无效"), topicError);
+    // Topic, reviewers and CC are persisted per repository; the rest applies to this push only.
+    QVariantMap optionMap = extraOptions;
+    optionMap.insert(QStringLiteral("topic"), m_repositoryConfig.topic);
+    optionMap.insert(QStringLiteral("reviewers"), m_repositoryConfig.reviewers);
+    optionMap.insert(QStringLiteral("cc"), m_repositoryConfig.cc);
+    const GerritPushOptions pushOptions = pushOptionsFromMap(optionMap);
+    QString optionsError;
+    if (!GerritService::validatePushOptions(pushOptions, &optionsError)) {
+        reportError(tr("推送选项无效"), optionsError);
         return;
     }
     GitCommand command;
@@ -1093,7 +1214,7 @@ void WorkspaceController::pushActive()
     command.workspacePath = m_workspacePath;
     command.target.remote = m_repositoryConfig.remote;
     command.target.branch = m_repositoryConfig.targetBranch;
-    command.target.topic = m_repositoryConfig.topic;
+    command.target.options = pushOptions;
     command.kind = GitCommandKind::PushChangeIdPreflight;
     command.title = tr("检查待推送提交的 Change-Id");
     command.stopOnFailure = true;
@@ -1102,6 +1223,551 @@ void WorkspaceController::pushActive()
     setLastGerritReviewUrl(QString());
     setPushStatus(1, tr("正在检查提交并准备推送 %1 → %2…").arg(selectedName(), m_repositoryConfig.targetBranch));
     enqueue(command);
+}
+
+void WorkspaceController::fetchChange(const QString &spec, int mode)
+{
+    if (m_activeIndex < 0 || mode < 0 || mode > 2) return;
+    const QString title = tr("无法下载 Change");
+    if (busy()) { reportError(title, tr("请等待当前任务完成。")); return; }
+    int change = 0;
+    int patchset = 0;
+    QString error;
+    if (!GerritService::parseChangeSpec(spec, &change, &patchset, &error)) {
+        reportError(title, error);
+        return;
+    }
+    if (hasPendingOperation()) {
+        reportError(title, tr("请先完成或终止当前未完成的 Git 操作。"));
+        return;
+    }
+    if (mode == 1 && isDetachedBranch(selectedBranch())) {
+        reportError(title, tr("当前处于 detached HEAD；请先切换到需要接收该 Change 的本地分支。"));
+        return;
+    }
+    const QString remote = m_repositoryConfig.remote.trimmed();
+    if (remote.isEmpty() || remote.startsWith(QLatin1Char('-'))) {
+        reportError(title, tr("请先在推送面板为当前仓库配置 Gerrit Remote。"));
+        return;
+    }
+    const QScopedValueRollback<quint64> operation(m_enqueueOperationId, ++m_nextOperationId);
+    GitCommand command;
+    command.workingDirectory = absoluteRepositoryPath(m_activeIndex);
+    command.repositoryIndex = m_activeIndex;
+    command.repositoryPath = selectedPath();
+    command.target.remote = remote;
+    command.change.number = change;
+    command.change.patchset = patchset;
+    command.change.mode = mode;
+    command.stopOnFailure = true;
+    if (patchset > 0) {
+        enqueueChangeFetch(command);
+        return;
+    }
+    command.arguments = {QStringLiteral("ls-remote"), remote, GerritService::changeRef(change, 0)};
+    command.kind = GitCommandKind::ChangeLookup;
+    command.title = tr("查询 Change %1 的最新补丁集").arg(change);
+    enqueue(command);
+}
+
+void WorkspaceController::enqueueChangeFetch(GitCommand command)
+{
+    const GitCommand::ChangeRequest change = command.change;
+    command.arguments = {QStringLiteral("fetch"), QStringLiteral("--no-tags"), command.target.remote,
+                         GerritService::changeRef(change.number, change.patchset)};
+    command.kind = GitCommandKind::ChangeFetch;
+    command.title = tr("下载 Change %1 补丁集 %2").arg(change.number).arg(change.patchset);
+    enqueue(command);
+
+    // FETCH_HEAD is consumed by the next command of the same operation; a failed fetch cancels it.
+    QStringList arguments;
+    QString title;
+    if (change.mode == 0) {
+        const QString branch = QStringLiteral("review/%1-%2").arg(change.number).arg(change.patchset);
+        arguments = {QStringLiteral("checkout"), QStringLiteral("-b"), branch, QStringLiteral("FETCH_HEAD")};
+        title = tr("检出到新分支 %1").arg(branch);
+    } else if (change.mode == 1) {
+        arguments = {QStringLiteral("cherry-pick"), QStringLiteral("FETCH_HEAD")};
+        title = tr("摘取 Change %1/%2 到当前分支").arg(change.number).arg(change.patchset);
+    } else {
+        arguments = {QStringLiteral("checkout"), QStringLiteral("--detach"), QStringLiteral("FETCH_HEAD")};
+        title = tr("以 detached HEAD 检出 Change %1/%2").arg(change.number).arg(change.patchset);
+    }
+    enqueueGit(command.repositoryIndex, arguments, title, GitCommandKind::General, true);
+    enqueueRepositoryRefresh(command.repositoryIndex, true);
+}
+
+void WorkspaceController::requestCommitMessage(const QString &revision)
+{
+    static const QRegularExpression hashPattern(QStringLiteral("^[0-9a-fA-F]{7,64}$"));
+    if (m_activeIndex < 0 || !hashPattern.match(revision.trimmed()).hasMatch()) return;
+    GitCommand command;
+    command.arguments = {QStringLiteral("log"), QStringLiteral("-1"), QStringLiteral("--format=%B"),
+                         revision.trimmed(), QStringLiteral("--")};
+    command.workingDirectory = absoluteRepositoryPath(m_activeIndex);
+    command.repositoryIndex = m_activeIndex;
+    command.repositoryPath = selectedPath();
+    command.revision = revision.trimmed();
+    command.kind = GitCommandKind::CommitMessage;
+    command.title = tr("读取提交说明");
+    enqueue(command);
+}
+
+void WorkspaceController::rewriteCommit(const QString &revision, int action, const QString &message)
+{
+    if (m_activeIndex < 0 || action < 0 || action > 2) return;
+    const QString title = tr("无法改写提交");
+    if (busy()) { reportError(title, tr("请等待当前任务完成。")); return; }
+    static const QRegularExpression hashPattern(QStringLiteral("^[0-9a-fA-F]{7,64}$"));
+    const QString hash = revision.trimmed().toLower();
+    if (!hashPattern.match(hash).hasMatch()) {
+        reportError(title, tr("提交 ID 无效。"));
+        return;
+    }
+    if (isDetachedBranch(selectedBranch())) {
+        reportError(title, tr("当前处于 detached HEAD；请先切换到承载该提交链的本地分支。"));
+        return;
+    }
+    if (hasPendingOperation()) {
+        reportError(title, tr("请先完成或终止当前未完成的 Git 操作。"));
+        return;
+    }
+    if (action == 1) {
+        const bool hasStaged = std::any_of(m_changedFiles.cbegin(), m_changedFiles.cend(), [](const QVariant &file) {
+            return file.toMap().value(QStringLiteral("hasStagedChanges")).toBool();
+        });
+        if (!hasStaged || m_detailsCached) {
+            reportError(title, tr("没有已暂存的改动。请先暂存要并入该提交的修改。"));
+            return;
+        }
+    }
+    if (action == 2 && message.trimmed().isEmpty()) {
+        reportError(title, tr("提交说明不能为空。"));
+        return;
+    }
+    // Only commits that are not yet in the Gerrit target branch may be rewritten.
+    const QString remote = m_repositoryConfig.remote.trimmed();
+    const QString target = m_repositoryConfig.targetBranch.trimmed();
+    const QString base = !remote.isEmpty() && !target.isEmpty()
+        ? QStringLiteral("refs/remotes/%1/%2").arg(remote, target) : QStringLiteral("@{upstream}");
+    const QScopedValueRollback<quint64> operation(m_enqueueOperationId, ++m_nextOperationId);
+    GitCommand command;
+    command.arguments = {QStringLiteral("log"), QStringLiteral("--format=%H%x00%P%x00%B%x00"),
+                         base + QStringLiteral("..HEAD"), QStringLiteral("--")};
+    command.workingDirectory = absoluteRepositoryPath(m_activeIndex);
+    command.repositoryIndex = m_activeIndex;
+    command.repositoryPath = selectedPath();
+    command.revision = hash;
+    command.rewrite.action = action;
+    command.rewrite.message = message.trimmed();
+    command.target.remote = remote;
+    command.target.branch = target;
+    command.kind = GitCommandKind::RewritePreflight;
+    command.title = tr("检查待改写的提交链");
+    command.stopOnFailure = true;
+    enqueue(command);
+}
+
+void WorkspaceController::enqueueRewrite(const GitCommand &completed, const QString &output)
+{
+    const QString title = tr("无法改写提交");
+    struct Entry { QString sha; QStringList parents; QString message; };
+    QList<Entry> entries;
+    const QStringList fields = output.split(QChar(0));
+    for (int i = 0; i + 2 < fields.size(); i += 3) {
+        const QString sha = fields.at(i).trimmed();
+        if (sha.isEmpty()) break;
+        entries.append({sha, fields.at(i + 1).split(QLatin1Char(' '), Qt::SkipEmptyParts), fields.at(i + 2)});
+    }
+    int position = -1;
+    for (int i = 0; i < entries.size(); ++i) {
+        if (entries.at(i).sha.startsWith(completed.revision)) { position = i; break; }
+    }
+    if (position < 0) {
+        reportError(title, tr("提交 %1 已在目标分支中或不在当前分支上。已合入 Gerrit 的提交不能改写，请改为提交新的修复。")
+            .arg(completed.revision.left(10)), ErrorType::General, {}, &completed);
+        return;
+    }
+    for (int i = 0; i <= position; ++i) {
+        if (entries.at(i).parents.size() > 1) {
+            reportError(title, tr("提交链中包含合并提交，无法自动改写；请在终端处理。"),
+                        ErrorType::General, {}, &completed);
+            return;
+        }
+    }
+    const Entry &entry = entries.at(position);
+    const QString onto = entry.parents.isEmpty() ? QStringLiteral("--root") : entry.parents.first();
+    const int index = completed.repositoryIndex;
+    const QScopedValueRollback<quint64> operation(m_enqueueOperationId, completed.operationId);
+
+    if (completed.rewrite.action == 1) {
+        enqueueGit(index, GitQueries::commitScope(), tr("检查提交仓库边界"),
+                   GitCommandKind::CommitScopePreflight, true);
+        enqueueGit(index, {QStringLiteral("commit"), QStringLiteral("--fixup=") + entry.sha},
+                   tr("创建待并入 %1 的修正提交").arg(entry.sha.left(10)), GitCommandKind::General, true);
+        enqueueGit(index, {QStringLiteral("-c"), QStringLiteral("sequence.editor=:"),
+                           QStringLiteral("rebase"), QStringLiteral("-i"), QStringLiteral("--autosquash"),
+                           QStringLiteral("--autostash"), onto},
+                   tr("将暂存改动并入提交 %1").arg(entry.sha.left(10)), GitCommandKind::General, true);
+        enqueueRepositoryRefresh(index, true);
+        return;
+    }
+
+    // Mark only the selected commit as "edit"; the hash is validated hex, so the shell script is fixed text.
+    const QString editScript = QStringLiteral("sequence.editor=sed -i -E -e 's/^(pick|p) (%1[0-9a-f]*)( |$)/edit \\2\\3/'")
+        .arg(entry.sha.left(7));
+    GitCommand stop = completed;
+    stop.arguments = {QStringLiteral("-c"), editScript, QStringLiteral("rebase"), QStringLiteral("-i"),
+                      QStringLiteral("--autostash"), onto};
+    stop.kind = GitCommandKind::RewriteStop;
+    stop.title = tr("停在提交 %1").arg(entry.sha.left(10));
+    stop.affectedRepositories = {completed.repositoryPath};
+    enqueue(stop);
+    if (completed.rewrite.action == 2) {
+        // Keep the Change-Id so Gerrit updates the existing change instead of creating a new one.
+        static const QRegularExpression changeIdLine(QStringLiteral("(?m)^Change-Id:[ \\t]*I[0-9a-fA-F]{40}[ \\t]*$"));
+        QString message = completed.rewrite.message;
+        const auto original = changeIdLine.match(entry.message);
+        if (original.hasMatch() && !changeIdLine.match(message).hasMatch())
+            message += QStringLiteral("\n\n") + original.captured(0).trimmed();
+        GitCommand amend;
+        amend.arguments = {QStringLiteral("commit"), QStringLiteral("--amend"), QStringLiteral("--allow-empty"),
+                           QStringLiteral("-F"), QStringLiteral("-")};
+        amend.standardInput = (message + QLatin1Char('\n')).toUtf8();
+        amend.workingDirectory = completed.workingDirectory;
+        amend.repositoryIndex = index;
+        amend.repositoryPath = completed.repositoryPath;
+        amend.kind = GitCommandKind::General;
+        amend.affectedRepositories = {completed.repositoryPath};
+        amend.title = tr("改写提交说明");
+        amend.stopOnFailure = true;
+        enqueue(amend);
+        enqueueGit(index, {QStringLiteral("rebase"), QStringLiteral("--continue")},
+                   tr("继续 Rebase"), GitCommandKind::General, true);
+    }
+    enqueueRepositoryRefresh(index, true);
+}
+
+QVariantList WorkspaceController::batchPushRows() const
+{
+    QVariantList rows;
+    for (const BatchPushRow &row : m_batchRows) {
+        // Explain where the target came from so a wrong branch is noticed before pushing.
+        QString note;
+        bool warning = false;
+        if (row.target.isEmpty()) {
+            note = row.manifestRevision.isEmpty()
+                ? tr("未配置目标分支，请填写")
+                : tr("manifest 中为 %1，不是分支，请填写目标分支").arg(row.manifestRevision);
+            warning = true;
+        } else if (row.target != row.savedTarget) {
+            note = row.target == row.manifestTarget ? tr("来自 manifest，推送后保存") : tr("手动指定，推送后保存");
+            warning = true;
+        } else if (!row.manifestTarget.isEmpty() && row.manifestTarget != row.target) {
+            note = tr("与 manifest 的 %1 不一致，请确认").arg(row.manifestTarget);
+            warning = true;
+        }
+        rows.append(QVariantMap{
+            {QStringLiteral("path"), row.path},
+            {QStringLiteral("name"), row.name},
+            {QStringLiteral("branch"), row.branch},
+            {QStringLiteral("remote"), row.remote},
+            {QStringLiteral("target"), row.target},
+            {QStringLiteral("state"), row.state},
+            {QStringLiteral("message"), row.message},
+            {QStringLiteral("url"), row.url},
+            {QStringLiteral("commits"), row.commits},
+            {QStringLiteral("included"), row.included},
+            {QStringLiteral("note"), note},
+            {QStringLiteral("warning"), warning},
+        });
+    }
+    return rows;
+}
+
+int WorkspaceController::batchRowIndex(const QString &path) const
+{
+    for (int i = 0; i < m_batchRows.size(); ++i) {
+        if (m_batchRows.at(i).path == path) return i;
+    }
+    return -1;
+}
+
+void WorkspaceController::resetBatchPush()
+{
+    ++m_batchRequest;
+    m_batchRows.clear();
+    m_batchRunning = false;
+    emit batchPushChanged();
+}
+
+void WorkspaceController::prepareBatchPush()
+{
+    if (m_batchRunning) return;
+    if (busy()) {
+        reportError(tr("无法批量推送"), tr("请等待当前任务完成。"));
+        return;
+    }
+    resetBatchPush();
+    for (const QString &path : m_model.selectedPaths()) {
+        const int index = m_model.indexOfPath(path);
+        if (index < 0) continue;
+        const auto config = WorkspaceSettings::loadRepositoryConfig(m_workspacePath, path);
+        BatchPushRow row;
+        row.path = path;
+        row.name = m_model.nameAt(index);
+        row.branch = m_model.branchAt(index);
+        row.remote = config.remote.trimmed().isEmpty() ? QStringLiteral("origin") : config.remote.trimmed();
+        row.savedTarget = config.targetBranchConfirmed ? config.targetBranch : QString();
+        row.state = QStringLiteral("checking");
+        m_batchRows.append(row);
+    }
+    emit batchPushChanged();
+    if (m_batchRows.isEmpty()) return;
+    if (!isRepoWorkspace()) {
+        resolveBatchTargets({});
+        return;
+    }
+    const QScopedValueRollback<quint64> operation(m_enqueueOperationId, ++m_nextOperationId);
+    GitCommand command;
+    command.program = QStringLiteral("repo");
+    command.arguments = {QStringLiteral("manifest"), QStringLiteral("-o"), QStringLiteral("-")};
+    command.workingDirectory = m_workspacePath;
+    command.workspacePath = m_workspacePath;
+    command.kind = GitCommandKind::BatchManifest;
+    command.title = tr("读取 Manifest 中各仓库的分支");
+    command.timeoutMilliseconds = 30000;
+    command.target.batchPush = true;
+    command.target.request = m_batchRequest;
+    enqueue(command);
+}
+
+void WorkspaceController::resolveBatchTargets(const QHash<QString, GerritService::ManifestTarget> &manifest)
+{
+    for (int i = 0; i < m_batchRows.size(); ++i) {
+        BatchPushRow &row = m_batchRows[i];
+        const auto entry = manifest.constFind(QDir::cleanPath(row.path));
+        if (entry != manifest.constEnd()) {
+            row.manifestTarget = entry->branch;
+            row.manifestRevision = entry->revision;
+        }
+        if (!row.savedTarget.isEmpty()) {
+            row.target = row.savedTarget;
+        } else if (!row.manifestTarget.isEmpty()) {
+            row.target = row.manifestTarget;
+            // Repo names each project's Git remote after the manifest remote.
+            if (entry != manifest.constEnd() && !entry->remote.isEmpty())
+                row.remote = entry->remote;
+        }
+        enqueueBatchPreflight(i, false);
+    }
+    emit batchPushChanged();
+}
+
+void WorkspaceController::enqueueBatchPreflight(int rowIndex, bool execute)
+{
+    BatchPushRow &row = m_batchRows[rowIndex];
+    const int index = m_model.indexOfPath(row.path);
+    row.commits = 0;
+    row.url.clear();
+    // Problems found while executing count as failures in the batch summary.
+    const QString invalid = execute ? QStringLiteral("failed") : QStringLiteral("error");
+    if (index < 0) {
+        row.state = invalid;
+        row.message = tr("仓库已不在列表中。");
+        return;
+    }
+    row.branch = m_model.branchAt(index);
+    if (isDetachedBranch(row.branch)) {
+        row.state = invalid;
+        row.message = tr("处于 detached HEAD，请先切换到承载本次提交的本地分支（如 repo start 创建的分支）。");
+        return;
+    }
+    if (row.target.isEmpty()) {
+        row.state = invalid;
+        row.message = tr("请填写目标分支。");
+        return;
+    }
+    QString branchError;
+    if (!GitService::validateBranchName(row.target, &branchError)
+        || !GitService::validateBranchName(row.remote, &branchError) || row.remote.contains(QLatin1Char('/'))) {
+        row.state = invalid;
+        row.message = tr("Remote 或目标分支无效。");
+        return;
+    }
+    row.state = execute ? QStringLiteral("queued") : QStringLiteral("checking");
+    row.message.clear();
+    // Every repository is its own operation, so one failure cancels only that repository's push.
+    const QScopedValueRollback<quint64> operation(m_enqueueOperationId, ++m_nextOperationId);
+    GitCommand command;
+    command.arguments = {QStringLiteral("log"), QStringLiteral("--format=%H%x00%B%x00"),
+                         QStringLiteral("refs/remotes/%1/%2..HEAD").arg(row.remote, row.target),
+                         QStringLiteral("--")};
+    command.workingDirectory = absoluteRepositoryPath(index);
+    command.repositoryIndex = index;
+    command.repositoryPath = row.path;
+    command.workspacePath = m_workspacePath;
+    command.target.remote = row.remote;
+    command.target.branch = row.target;
+    command.target.batchPush = true;
+    command.target.request = m_batchRequest;
+    command.kind = execute ? GitCommandKind::PushChangeIdPreflight : GitCommandKind::BatchPreflight;
+    command.title = tr("检查 %1 的待推送提交").arg(row.name);
+    command.stopOnFailure = true;
+    enqueue(command);
+}
+
+void WorkspaceController::setBatchPushTarget(const QString &path, const QString &branch)
+{
+    const int rowIndex = batchRowIndex(path);
+    if (m_batchRunning || rowIndex < 0) return;
+    BatchPushRow &row = m_batchRows[rowIndex];
+    const QString target = branch.trimmed();
+    if (row.target == target && row.state != QStringLiteral("error")) return;
+    row.target = target;
+    enqueueBatchPreflight(rowIndex, false);
+    emit batchPushChanged();
+}
+
+void WorkspaceController::setBatchPushIncluded(const QString &path, bool included)
+{
+    const int rowIndex = batchRowIndex(path);
+    if (m_batchRunning || rowIndex < 0 || m_batchRows.at(rowIndex).included == included) return;
+    m_batchRows[rowIndex].included = included;
+    emit batchPushChanged();
+}
+
+void WorkspaceController::startBatchPush(const QVariantMap &options)
+{
+    const QString title = tr("无法批量推送");
+    if (m_batchRunning) return;
+    if (busy()) { reportError(title, tr("请等待仓库检查完成。")); return; }
+    QString optionsError;
+    if (!GerritService::validatePushOptions(pushOptionsFromMap(options), &optionsError)) {
+        reportError(title, optionsError);
+        return;
+    }
+    QList<int> ready;
+    for (int i = 0; i < m_batchRows.size(); ++i) {
+        if (m_batchRows.at(i).included && m_batchRows.at(i).state == QStringLiteral("ready"))
+            ready.append(i);
+    }
+    if (ready.isEmpty()) {
+        reportError(title, tr("没有可推送的仓库。"));
+        return;
+    }
+    m_batchPushOptions = pushOptionsFromMap(options);
+    m_batchRunning = true;
+    for (int i : ready) {
+        // Pushing confirms the target, exactly like the single-repository push dialog.
+        BatchPushRow &row = m_batchRows[i];
+        auto config = WorkspaceSettings::loadRepositoryConfig(m_workspacePath, row.path);
+        config.remote = row.remote;
+        config.targetBranch = row.target;
+        config.targetBranchConfirmed = true;
+        WorkspaceSettings::saveRepositoryConfig(m_workspacePath, row.path, config);
+        row.savedTarget = row.target;
+        if (row.path == selectedPath() && m_activeIndex >= 0) {
+            m_repositoryConfig.remote = row.remote;
+            m_repositoryConfig.targetBranch = row.target;
+            m_repositoryConfig.targetBranchConfirmed = true;
+            emit settingsChanged();
+        }
+        enqueueBatchPreflight(i, true);
+    }
+    appendConsole(tr("开始批量推送 %1 个仓库。").arg(ready.size()));
+    finishBatchPushIfDone();
+    emit batchPushChanged();
+}
+
+void WorkspaceController::handleBatchPushResult(const GitCommandResult &result)
+{
+    const GitCommand &completed = result.command;
+    if (completed.generation != m_generation || completed.target.request != m_batchRequest) return;
+    const bool success = result.status == ExecutionStatus::Success;
+    if (completed.kind == GitCommandKind::BatchManifest) {
+        if (!success)
+            appendConsole(tr("读取 Manifest 失败，仅使用已保存的目标分支。\n") + result.diagnosticMessage);
+        resolveBatchTargets(success ? GerritService::parseManifestTargets(result.standardOutput)
+                                    : QHash<QString, GerritService::ManifestTarget>{});
+        return;
+    }
+    const int rowIndex = batchRowIndex(completed.repositoryPath);
+    if (rowIndex < 0) return;
+    BatchPushRow &row = m_batchRows[rowIndex];
+    // A target edited while the previous check was queued makes that check stale.
+    if (completed.target.remote != row.remote || completed.target.branch != row.target) return;
+
+    if (result.status == ExecutionStatus::Canceled) {
+        row.state = QStringLiteral("canceled");
+        row.message = completed.kind == GitCommandKind::GerritPush
+            ? tr("已取消；推送结果未确认，请在 Gerrit 核对。") : tr("已取消。");
+    } else if (completed.kind == GitCommandKind::BatchPreflight
+               || completed.kind == GitCommandKind::PushChangeIdPreflight) {
+        const bool execute = completed.kind == GitCommandKind::PushChangeIdPreflight;
+        const QString failed = execute ? QStringLiteral("failed") : QStringLiteral("error");
+        const PendingCommits pending = scanPendingCommits(QString::fromLocal8Bit(result.standardOutput));
+        row.commits = pending.count;
+        if (!success) {
+            row.state = failed;
+            row.message = tr("本地没有 %1/%2 的远端跟踪分支，请先拉取，或检查目标分支名。")
+                .arg(row.remote, row.target);
+        } else if (pending.count == 0) {
+            row.state = QStringLiteral("nothing");
+            row.message = tr("没有待推送的提交。");
+        } else if (!pending.missingChangeId.isEmpty()) {
+            row.state = failed;
+            row.message = tr("%1 个提交缺少 Change-Id（%2），请在该仓库单独推送修复。")
+                .arg(pending.missingChangeId.size()).arg(pending.missingChangeId.join(QStringLiteral(", ")));
+        } else if (!execute) {
+            row.state = QStringLiteral("ready");
+            row.message = tr("待推送 %1 个提交").arg(pending.count);
+        } else {
+            row.state = QStringLiteral("pushing");
+            row.message = tr("正在推送 %1 个提交…").arg(pending.count);
+            const QScopedValueRollback<quint64> operation(m_enqueueOperationId, completed.operationId);
+            GitCommand push = m_gerrit.createPushCommand(completed.repositoryIndex, completed.workingDirectory,
+                completed.repositoryPath, row.remote, row.target, m_batchPushOptions);
+            push.workspacePath = completed.workspacePath;
+            push.target = completed.target;
+            push.affectedRepositories.clear();
+            enqueue(push);
+        }
+    } else if (completed.kind == GitCommandKind::GerritPush) {
+        const QString url = success ? GerritService::extractReviewUrl(result.standardOutput, result.standardError)
+                                    : QString();
+        if (!success) {
+            row.state = QStringLiteral("failed");
+            row.message = GerritService::parseGerritError(result.standardError, result.diagnosticMessage);
+        } else if (url.isEmpty()) {
+            row.state = QStringLiteral("failed");
+            row.message = tr("未收到 Gerrit 审查链接，结果未确认；请先核对 Gerrit，避免盲目重推。");
+        } else {
+            row.state = QStringLiteral("success");
+            row.url = url;
+            row.message = tr("推送成功");
+            appendConsole(tr("%1：%2").arg(row.name, url));
+        }
+        enqueueGit(completed.repositoryIndex, GitQueries::summary(), tr("刷新仓库状态"), GitCommandKind::Status);
+    }
+    finishBatchPushIfDone();
+    emit batchPushChanged();
+}
+
+void WorkspaceController::finishBatchPushIfDone()
+{
+    if (!m_batchRunning) return;
+    int succeeded = 0;
+    int failed = 0;
+    for (const BatchPushRow &row : m_batchRows) {
+        if (row.state == QStringLiteral("queued") || row.state == QStringLiteral("pushing")) return;
+        if (row.state == QStringLiteral("success")) ++succeeded;
+        else if (row.state == QStringLiteral("failed") || row.state == QStringLiteral("canceled")) ++failed;
+    }
+    m_batchRunning = false;
+    const QString summary = tr("批量推送结束：成功 %1 个，失败或未确认 %2 个。").arg(succeeded).arg(failed);
+    appendConsole(summary);
+    emit operationFinished(summary);
 }
 
 void WorkspaceController::repairLastCommitChangeId()
@@ -1629,9 +2295,42 @@ void WorkspaceController::resumePendingCommitAfterHook()
     });
 }
 
+void WorkspaceController::finishHookInstall(const GitCommand &completed)
+{
+    const QString hookPath = completed.hook.targetPath;
+    const QString temporaryPath = completed.hook.temporaryPath;
+    if (completed.repositoryIndex != m_activeIndex || completed.repositoryPath != selectedPath()
+        || temporaryPath.isEmpty() || QFileInfo(temporaryPath).size() == 0
+        || QFileInfo::exists(hookPath) || QFileInfo(hookPath).isSymLink()
+        || !QFile::rename(temporaryPath, hookPath)) {
+        QFile::remove(temporaryPath);
+        m_resumePendingCommit = false;
+        reportError(tr("无法安装 Hook"), tr("Hook 安装结果无效或目标路径已被其他程序占用；未覆盖现有文件。"));
+        return;
+    }
+    GerritService::finalizeHookPermissions(hookPath);
+    const QFileInfo installedHook(hookPath);
+    setCommitHookStatus(installedHook.isFile() && installedHook.isExecutable());
+    if (!m_hasCommitHook) {
+        m_resumePendingCommit = false;
+        reportError(tr("无法安装 Hook"), tr("Hook 文件已下载，但未通过可执行性检查：%1").arg(hookPath));
+        return;
+    }
+    resumePendingCommitAfterHook();
+}
+
 void WorkspaceController::stop()
 {
     cancelScheduledRefresh();
+    if (m_batchRunning) {
+        for (BatchPushRow &row : m_batchRows) {
+            if (row.state == QStringLiteral("queued") || row.state == QStringLiteral("pushing")) {
+                row.state = QStringLiteral("canceled");
+                row.message = tr("已取消；正在推送的仓库结果未确认，请在 Gerrit 核对。");
+            }
+        }
+        finishBatchPushIfDone();
+    }
     m_pendingCommit = {};
     m_resumePendingCommit = false;
     m_repairChangeIdRevision.clear();
@@ -1719,6 +2418,10 @@ void WorkspaceController::onGitCommandFinished(const GitCommandResult &result)
     const QString output = QString::fromLocal8Bit(result.standardOutput);
     const bool success = result.status == ExecutionStatus::Success;
 
+    if (completed.target.batchPush) {
+        handleBatchPushResult(result);
+        return;
+    }
     if (!success && completed.kind == GitCommandKind::InstallHook)
         QFile::remove(completed.hook.temporaryPath);
     if (!success && (completed.kind == GitCommandKind::HookRemoteUrl
@@ -1889,7 +2592,7 @@ void WorkspaceController::onGitCommandFinished(const GitCommandResult &result)
         const QScopedValueRollback<quint64> operation(m_enqueueOperationId, completed.operationId);
         GitCommand push = m_gerrit.createPushCommand(completed.repositoryIndex,
             completed.workingDirectory, completed.repositoryPath,
-            completed.target.remote, completed.target.branch, completed.target.topic);
+            completed.target.remote, completed.target.branch, completed.target.options);
         push.workspacePath = completed.workspacePath;
         setPushStatus(1, tr("正在推送 %1 → %2…").arg(selectedName(), completed.target.branch));
         enqueue(push);
@@ -2083,6 +2786,49 @@ void WorkspaceController::onGitCommandFinished(const GitCommandResult &result)
             enqueue(query);
         }
         break;
+    case GitCommandKind::CommitMessage:
+        if (completed.repositoryIndex == m_activeIndex && completed.repositoryPath == selectedPath()) {
+            QString message = output;
+            while (message.endsWith(QLatin1Char('\n'))) message.chop(1);
+            emit commitMessageReady(completed.revision, message);
+        }
+        break;
+    case GitCommandKind::ChangeLookup: {
+        if (completed.repositoryIndex != m_activeIndex || completed.repositoryPath != selectedPath()) {
+            reportError(tr("无法下载 Change"), tr("当前仓库已变化，请重新操作。"));
+            return;
+        }
+        const int latest = GerritService::latestPatchset(output, completed.change.number);
+        if (latest <= 0) {
+            reportError(tr("无法下载 Change"),
+                tr("远端 %1 上找不到 Change %2。请确认 Change 号正确、当前账号有权访问，且该 Change 属于当前仓库。")
+                    .arg(completed.target.remote).arg(completed.change.number),
+                ErrorType::General, {}, &completed);
+            return;
+        }
+        appendConsole(tr("Change %1 的最新补丁集为 %2。\n").arg(completed.change.number).arg(latest));
+        const QScopedValueRollback<quint64> operation(m_enqueueOperationId, completed.operationId);
+        GitCommand fetch = completed;
+        fetch.change.patchset = latest;
+        enqueueChangeFetch(fetch);
+        return;
+    }
+    case GitCommandKind::ChangeFetch:
+    case GitCommandKind::BatchManifest:
+    case GitCommandKind::BatchPreflight:
+        break;
+    case GitCommandKind::RewritePreflight:
+        if (completed.repositoryIndex != m_activeIndex || completed.repositoryPath != selectedPath()) {
+            reportError(tr("无法改写提交"), tr("当前仓库已变化，请重新操作。"));
+            return;
+        }
+        enqueueRewrite(completed, output);
+        return;
+    case GitCommandKind::RewriteStop:
+        if (completed.rewrite.action == 0)
+            appendConsole(tr("已停在提交 %1：修改文件并暂存后，在提交面板勾选“修订”提交，再点击顶部“继续”。\n")
+                              .arg(completed.revision.left(10)));
+        break;
     case GitCommandKind::LastCommitMessage:
         if (completed.repositoryIndex == m_activeIndex) {
             m_lastCommitMessage = output.trimmed();
@@ -2171,9 +2917,15 @@ void WorkspaceController::onGitCommandFinished(const GitCommandResult &result)
         }
         appendConsole(tr("仅拉取 %1 的 %2；不获取其他分支、标签或子模块。")
                       .arg(remote, remoteRef));
-        enqueueGit(completed.repositoryIndex, dailyPullArguments(remote, remoteRef),
-                   tr("拉取仓库 %1").arg(m_model.nameAt(completed.repositoryIndex)),
-                   GitCommandKind::PullExecution, true);
+        const bool rebase = completed.target.pullRebase;
+        GitCommand pull = completed;
+        pull.arguments = dailyPullArguments(remote, remoteRef, rebase);
+        pull.title = rebase ? tr("变基拉取仓库 %1").arg(m_model.nameAt(completed.repositoryIndex))
+                            : tr("拉取仓库 %1").arg(m_model.nameAt(completed.repositoryIndex));
+        pull.kind = GitCommandKind::PullExecution;
+        // A conflicting rebase stops mid-way; refresh so the conflict banner appears.
+        pull.affectedRepositories = {completed.repositoryPath};
+        enqueue(pull);
         enqueueRepositoryRefresh(completed.repositoryIndex, completed.repositoryIndex == m_activeIndex);
         break;
     }
@@ -2367,6 +3119,11 @@ void WorkspaceController::onGitCommandFinished(const GitCommandResult &result)
         }
         const QString temporaryPath = temporary.fileName();
         temporary.close();
+        if (GerritService::isHttpHookSource(completed.hook.source)) {
+            appendConsole(tr("正在从 %1 下载 Change-Id Hook…\n").arg(completed.hook.source));
+            m_gerrit.downloadHook(completed, targetHook, temporaryPath);
+            return;
+        }
         GitCommand command = m_gerrit.createInstallHookCommand(completed, targetHook, temporaryPath);
         enqueue(command);
         return;
@@ -2427,29 +3184,9 @@ void WorkspaceController::onGitCommandFinished(const GitCommandResult &result)
         }
         break;
     }
-    case GitCommandKind::InstallHook: {
-        const QString hookPath = completed.hook.targetPath;
-        const QString temporaryPath = completed.hook.temporaryPath;
-        if (completed.repositoryIndex != m_activeIndex || completed.repositoryPath != selectedPath()
-            || temporaryPath.isEmpty() || QFileInfo(temporaryPath).size() == 0
-            || QFileInfo::exists(hookPath) || QFileInfo(hookPath).isSymLink()
-            || !QFile::rename(temporaryPath, hookPath)) {
-            QFile::remove(temporaryPath);
-            m_resumePendingCommit = false;
-            reportError(tr("无法安装 Hook"), tr("Hook 安装结果无效或目标路径已被其他程序占用；未覆盖现有文件。"));
-            return;
-        }
-        GerritService::finalizeHookPermissions(hookPath);
-        const QFileInfo installedHook(hookPath);
-        setCommitHookStatus(installedHook.isFile() && installedHook.isExecutable());
-        if (!m_hasCommitHook) {
-            m_resumePendingCommit = false;
-            reportError(tr("无法安装 Hook"), tr("Hook 文件已下载，但未通过可执行性检查：%1").arg(hookPath));
-            return;
-        }
-        resumePendingCommitAfterHook();
+    case GitCommandKind::InstallHook:
+        finishHookInstall(completed);
         return;
-    }
     case GitCommandKind::HunkOperation:
     case GitCommandKind::General:
         break;
@@ -2479,6 +3216,16 @@ void WorkspaceController::onGitCommandFinished(const GitCommandResult &result)
                 m_pushOperationId = 0;
                 setPushStatus(3, tr("推送失败，请查看错误信息和命令日志。"));
             }
+        } else if (completed.kind == GitCommandKind::ChangeLookup || completed.kind == GitCommandKind::ChangeFetch) {
+            const QString stderrLower = QString::fromLocal8Bit(result.standardError).toLower();
+            if (!GerritService::credentialHint(result.standardError).isEmpty())
+                errorMsg = GerritService::credentialHint(result.standardError);
+            else if (stderrLower.contains(QStringLiteral("couldn't find remote ref")))
+                errorMsg = tr("远端不存在 Change %1 的补丁集 %2，或该 Change 不属于当前仓库。")
+                    .arg(completed.change.number).arg(completed.change.patchset);
+        } else if (completed.kind == GitCommandKind::RewritePreflight) {
+            errorMsg = tr("无法确定提交链的基准分支。请先在推送面板选择 Gerrit 目标分支，或为当前分支设置拉取上游。\n")
+                + result.diagnosticMessage;
         } else if (completed.kind == GitCommandKind::PushChangeIdPreflight) {
             errorMsg = tr("无法检查目标分支到 HEAD 的待推送提交。请先获取目标分支的远端跟踪引用，再重试推送。\n")
                 + result.diagnosticMessage;
@@ -2495,7 +3242,13 @@ void WorkspaceController::onGitCommandFinished(const GitCommandResult &result)
                 errorActions = {QStringLiteral("upstream")};
                 errorMsg = tr("当前分支未设置拉取上游。请在拉取面板选择目标 Remote 和远端分支后重试。");
             } else if (stderrLower.contains(QStringLiteral("not possible to fast-forward")) || stderrLower.contains(QStringLiteral("non-fast-forward"))) {
-                errorMsg = tr("本地分支与远端已产生分叉，无法快进（fast-forward）拉取。\n请在终端执行合并（git merge）或变基（git rebase）。");
+                errorMsg = tr("本地分支与远端已产生分叉，无法快进（fast-forward）拉取。\n可在拉取面板选择“变基（Rebase）”方式重新拉取，本地提交会保留 Change-Id 并接到远端最新提交之后。");
+            } else if (completed.target.pullRebase && stderrLower.contains(QStringLiteral("could not apply"))) {
+                errorMsg = tr("变基拉取时发生冲突，变基已暂停。\n请在改动列表解决冲突并标记已解决后点击“继续”，或点击“终止”恢复到拉取前的状态。");
+            } else if (stderrLower.contains(QStringLiteral("cannot pull with rebase")) || stderrLower.contains(QStringLiteral("cannot rebase"))) {
+                errorMsg = tr("工作区或暂存区存在未提交的改动，无法变基拉取。\n请先提交或贮藏（Stash）本地改动后再拉取。");
+            } else if (!GerritService::credentialHint(result.standardError).isEmpty()) {
+                errorMsg = GerritService::credentialHint(result.standardError);
             } else if (stderrLower.contains(QStringLiteral("would be overwritten by merge")) || stderrLower.contains(QStringLiteral("local changes"))) {
                 errorMsg = tr("本地存在未提交的文件改动，会被拉取操作覆盖。\n请先暂存（Stash）或提交本地改动后再拉取。");
             } else if (stderrLower.contains(QStringLiteral("could not resolve host")) || stderrLower.contains(QStringLiteral("connection timed out")) || stderrLower.contains(QStringLiteral("network is unreachable"))) {

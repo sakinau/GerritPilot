@@ -16,6 +16,8 @@ public:
         bool targetBranchConfirmed = false;
         bool requireChangeIdHook = true; // Preserve Gerrit safety; ordinary Git users can opt out per repository.
         QString topic;
+        QString reviewers;
+        QString cc;
         QString gerritHost;
         QString gerritUser;
         int gerritPort = 29418;
@@ -75,6 +77,8 @@ public:
         if (config.targetBranchConfirmed)
             config.targetBranch = settings.value(prefix + QStringLiteral("targetBranch")).toString().trimmed();
         config.topic = settings.value(prefix + QStringLiteral("topic")).toString();
+        config.reviewers = settings.value(prefix + QStringLiteral("reviewers")).toString();
+        config.cc = settings.value(prefix + QStringLiteral("cc")).toString();
         config.requireChangeIdHook = settings.value(prefix + QStringLiteral("requireChangeIdHook"), true).toBool();
         config.gerritHost = settings.value(prefix + QStringLiteral("gerritHost")).toString();
         config.gerritPort = settings.value(prefix + QStringLiteral("gerritPort"), 29418).toInt();
@@ -95,6 +99,8 @@ public:
             settings.setValue(prefix + QStringLiteral("targetBranchConfirmed"), true);
         }
         settings.setValue(prefix + QStringLiteral("topic"), config.topic);
+        settings.setValue(prefix + QStringLiteral("reviewers"), config.reviewers);
+        settings.setValue(prefix + QStringLiteral("cc"), config.cc);
         settings.setValue(prefix + QStringLiteral("requireChangeIdHook"), config.requireChangeIdHook);
         settings.setValue(prefix + QStringLiteral("gerritHost"), config.gerritHost);
         settings.setValue(prefix + QStringLiteral("gerritPort"), config.gerritPort);

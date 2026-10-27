@@ -16,6 +16,7 @@ ColumnLayout {
     signal revisionCheckoutRequested(string revision)
     signal cherryPickRequested(string revision)
     signal revertRequested(string revision)
+    signal rewriteRequested(string revision, string subject)
 
     readonly property var filteredEntries: {
         const entries = root.workspace ? root.workspace.historyEntries : []
@@ -172,6 +173,15 @@ ColumnLayout {
                                 toolTip: "将此提交摘取到当前分支"
                                 enabled: !root.workspace.busy
                                 onClicked: root.cherryPickRequested(historyDelegate.modelData.revision)
+                            }
+                            PrimaryButton {
+                                text: "改写"
+                                kind: "gray"
+                                compact: true
+                                toolTip: "修改、并入暂存改动或改写说明（仅限未合入的提交，保留 Change-Id）"
+                                enabled: !root.workspace.busy
+                                onClicked: root.rewriteRequested(historyDelegate.modelData.revision,
+                                                                 historyDelegate.modelData.subject)
                             }
                             PrimaryButton {
                                 text: "撤销"

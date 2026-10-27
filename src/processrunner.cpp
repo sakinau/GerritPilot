@@ -28,6 +28,10 @@ ProcessRunner::ProcessRunner(QObject *parent) : QObject(parent)
     env.insert(QStringLiteral("GIT_ASKPASS"), QStringLiteral("/bin/false"));
     env.insert(QStringLiteral("SSH_ASKPASS"), QStringLiteral("/bin/false"));
     env.insert(QStringLiteral("SSH_ASKPASS_REQUIRE"), QStringLiteral("never"));
+    // Editors cannot open without a terminal; continuing a rebase/merge keeps the prepared message.
+    env.insert(QStringLiteral("GIT_EDITOR"), QStringLiteral("true"));
+    // Rewrites pass their todo editor with -c sequence.editor; an inherited override would win over it.
+    env.remove(QStringLiteral("GIT_SEQUENCE_EDITOR"));
     m_process.setProcessEnvironment(env);
 #ifdef Q_OS_UNIX
     m_process.setUnixProcessParameters(QProcess::UnixProcessFlag::CreateNewSession);

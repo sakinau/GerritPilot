@@ -56,6 +56,13 @@ enum class GitCommandKind {
     RepoPrune,
     CherryPick,
     CherryPickSkipPreflight,
+    ChangeLookup,
+    ChangeFetch,
+    RewritePreflight,
+    RewriteStop,
+    CommitMessage,
+    BatchManifest,
+    BatchPreflight,
     General
 };
 
@@ -66,13 +73,36 @@ enum class ExecutionStatus {
     Timeout
 };
 
+// Gerrit magic-refspec options appended to refs/for/<branch>.
+struct GerritPushOptions {
+    enum WorkState { KeepWorkState, WorkInProgress, ReadyForReview };
+    QString topic;
+    QStringList reviewers;
+    QStringList cc;
+    QStringList hashtags;
+    WorkState workState = KeepWorkState;
+    bool privateChange = false;
+    QString message;
+};
+
 struct GitCommand {
     struct RemoteTarget {
         QString remote;
         QString branch;
-        QString topic;
+        GerritPushOptions options;
         QString localBranch;
+        bool pullRebase = false;
+        bool batchPush = false; // Results belong to the batch push table, not the active repository.
         quint64 request = 0;
+    };
+    struct ChangeRequest {
+        int number = 0;
+        int patchset = 0;
+        int mode = 0; // 0 new local branch, 1 cherry-pick, 2 detached checkout
+    };
+    struct RewriteRequest {
+        int action = 0; // 0 stop for edit, 1 fixup staged changes, 2 reword
+        QString message;
     };
     struct HookTransfer {
         QString source;
@@ -106,6 +136,8 @@ struct GitCommand {
     RemoteTarget target;
     HookTransfer hook;
     StashAction stash;
+    ChangeRequest change;
+    RewriteRequest rewrite;
     QString revision;
     bool rediscoverProjects = false;
     QStringList affectedRepositories;

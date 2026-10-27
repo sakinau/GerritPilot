@@ -46,6 +46,7 @@ set(GERRITPILOT_QML_FILES
     ../qml/features/navigation/WorkspaceStatusCard.qml
     ../qml/features/navigation/ProjectManagerDialog.qml
     ../qml/features/overlays/ActionDialogs.qml
+    ../qml/features/overlays/BatchPushDialog.qml
     ../qml/features/overlays/BranchPanel.qml
     ../qml/features/overlays/OperationErrorDialog.qml
     ../qml/features/overlays/SettingsPanel.qml

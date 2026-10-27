@@ -42,6 +42,7 @@ Item {
             collapsed: page.sidebarCollapsed
             onToggleRequested: page.sidebarCollapsed = !page.sidebarCollapsed
             onSyncRequested: actionDialogs.openSync()
+            onBatchPushRequested: batchPushDialog.open()
         }
 
         Item {
@@ -72,6 +73,7 @@ Item {
                     onSyncRequested: actionDialogs.openSync()
                     onCommitRequested: actionDialogs.commit(message, amend, stageAll)
                     onPushRequested: actionDialogs.openPush()
+                    onChangeDownloadRequested: actionDialogs.openChangeDownload()
                 }
             }
         }
@@ -79,6 +81,11 @@ Item {
 
     ActionDialogs {
         id: actionDialogs
+        workspace: page.workspaceApi
+    }
+
+    BatchPushDialog {
+        id: batchPushDialog
         workspace: page.workspaceApi
     }
 

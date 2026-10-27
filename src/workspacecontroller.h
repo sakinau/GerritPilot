@@ -60,6 +60,11 @@ class WorkspaceController final : public QObject
     Q_PROPERTY(QString remote READ remote WRITE setRemote NOTIFY settingsChanged)
     Q_PROPERTY(QString targetBranch READ targetBranch WRITE setTargetBranch NOTIFY settingsChanged)
     Q_PROPERTY(QString topic READ topic WRITE setTopic NOTIFY settingsChanged)
+    Q_PROPERTY(QString reviewers READ reviewers WRITE setReviewers NOTIFY settingsChanged)
+    Q_PROPERTY(QString cc READ cc WRITE setCc NOTIFY settingsChanged)
+    Q_PROPERTY(bool pullRebase READ pullRebase WRITE setPullRebase NOTIFY pullRebaseChanged)
+    Q_PROPERTY(QVariantList batchPushRows READ batchPushRows NOTIFY batchPushChanged)
+    Q_PROPERTY(bool batchPushRunning READ batchPushRunning NOTIFY batchPushChanged)
     Q_PROPERTY(bool requireChangeIdHook READ requireChangeIdHook WRITE setRequireChangeIdHook NOTIFY settingsChanged)
     Q_PROPERTY(QString gerritHost READ gerritHost WRITE setGerritHost NOTIFY settingsChanged)
     Q_PROPERTY(QString gerritUser READ gerritUser WRITE setGerritUser NOTIFY settingsChanged)
@@ -136,6 +141,12 @@ public:
     void setTargetBranch(const QString &value);
     QString topic() const { return m_repositoryConfig.topic; }
     void setTopic(const QString &value);
+    QString reviewers() const { return m_repositoryConfig.reviewers; }
+    void setReviewers(const QString &value);
+    QString cc() const { return m_repositoryConfig.cc; }
+    void setCc(const QString &value);
+    bool pullRebase() const { return m_pullRebase; }
+    void setPullRebase(bool value);
     bool requireChangeIdHook() const { return m_repositoryConfig.requireChangeIdHook; }
     void setRequireChangeIdHook(bool required);
     QString gerritHost() const { return m_repositoryConfig.gerritHost; }
@@ -175,7 +186,24 @@ public:
                                            const QString &compileNote = QString(),
                                            const QString &purpose = QString(),
                                            const QString &secondaryIssueId = QString());
-    Q_INVOKABLE void pushActive();
+    // options: topic, reviewers, cc, hashtags, workState (0 keep, 1 WIP, 2 ready), private, message
+    Q_INVOKABLE void pushActive(const QVariantMap &options = {});
+    Q_INVOKABLE QString pushCommandPreview(const QString &remote, const QString &branch,
+                                           const QVariantMap &options) const;
+    Q_INVOKABLE QString pushOptionsError(const QVariantMap &options) const;
+    // mode: 0 new local branch, 1 cherry-pick onto current branch, 2 detached checkout
+    Q_INVOKABLE void fetchChange(const QString &spec, int mode);
+    // action: 0 stop at commit for editing, 1 fold staged changes into it, 2 reword its message
+    Q_INVOKABLE void rewriteCommit(const QString &revision, int action, const QString &message = QString());
+    Q_INVOKABLE void requestCommitMessage(const QString &revision);
+
+    // Batch push of the checked repositories with shared Gerrit options.
+    QVariantList batchPushRows() const;
+    bool batchPushRunning() const { return m_batchRunning; }
+    Q_INVOKABLE void prepareBatchPush();
+    Q_INVOKABLE void setBatchPushTarget(const QString &path, const QString &branch);
+    Q_INVOKABLE void setBatchPushIncluded(const QString &path, bool included);
+    Q_INVOKABLE void startBatchPush(const QVariantMap &options);
     Q_INVOKABLE void checkoutBranch(const QString &branch);
     Q_INVOKABLE void checkoutRevision(const QString &revision);
     Q_INVOKABLE void showRevisionDiff(const QString &revision);
@@ -253,6 +281,9 @@ signals:
     void operationError(const QVariantMap &error);
     void operationFinished(const QString &message);
     void lastCommitMessageReady(const QString &workspacePath, const QString &repositoryPath, const QString &message);
+    void commitMessageReady(const QString &revision, const QString &message);
+    void pullRebaseChanged();
+    void batchPushChanged();
     void commitSucceeded(const QString &workspacePath, const QString &repositoryPath,
                          const QString &submittedMessage);
 
@@ -289,6 +320,30 @@ private:
     void updateCommitHookStatus();
     void setCommitHookStatus(bool installed);
     void resumePendingCommitAfterHook();
+    void finishHookInstall(const GitCommand &completed);
+    void enqueueChangeFetch(GitCommand command);
+    void enqueueRewrite(const GitCommand &completed, const QString &output);
+    struct BatchPushRow {
+        QString path;
+        QString name;
+        QString branch;
+        QString remote;
+        QString target;
+        QString savedTarget;
+        QString manifestTarget;
+        QString manifestRevision;
+        QString state; // checking, ready, nothing, error, queued, pushing, success, failed, canceled
+        QString message;
+        QString url;
+        int commits = 0;
+        bool included = true;
+    };
+    int batchRowIndex(const QString &path) const;
+    void resolveBatchTargets(const QHash<QString, GerritService::ManifestTarget> &manifest);
+    void enqueueBatchPreflight(int row, bool execute);
+    void handleBatchPushResult(const GitCommandResult &result);
+    void finishBatchPushIfDone();
+    void resetBatchPush();
     void applyStatus(int index, const GitStatusParser::Snapshot &snapshot, bool persist = true);
     bool isOwnRepositoryPath(int index, const QString &path) const;
     QVariantList ownRepositoryFiles(int index, const QVariantList &files) const;
@@ -369,6 +424,11 @@ private:
     QList<StashEntry> m_stashEntries;
     QString m_stashRepositoryPath;
     bool m_ignoreWhitespace = false;
+    bool m_pullRebase = false;
+    QList<BatchPushRow> m_batchRows;
+    quint64 m_batchRequest = 0;
+    bool m_batchRunning = false;
+    GerritPushOptions m_batchPushOptions;
     bool m_hasCommitHook = true;
     QString m_repairChangeIdRevision;
     struct PendingCommit {

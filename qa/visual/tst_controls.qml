@@ -36,6 +36,10 @@ TestCase {
         property string pushRemoteUrl: "ssh://example.invalid/repository"
         property string targetBranch: ""
         property string topic: ""
+        property string reviewers: ""
+        property string cc: ""
+        property bool pullRebase: false
+        property bool isRepoWorkspace: false
         property string selectedName: "sample"
         property string selectedBranch: "local"
         property string gerritHost: "example.invalid"
@@ -75,6 +79,9 @@ TestCase {
             remoteBranchesRemote = remoteName
             remoteBranches = ["release/alpha-fix", "release/alpha", "release/beta"]
             remoteBranchesLoaded = true
+        }
+        function pushCommandPreview(remoteName, branchName, options) {
+            return branchName.length ? "git push " + remoteName + " HEAD:refs/for/" + branchName : "未指定目标分支"
         }
     }
     CommitEditor {
@@ -435,7 +442,7 @@ TestCase {
         verify(panel !== null && scope !== null && type !== null && issue !== null && secIssue !== null && generate !== null)
         tryCompare(panel, "opened", true)
         compare(mock.generatedOptions, null)
-        compare(scope.currentIndex, 0)
+        compare(scope.currentIndex, 1) // No staged files: default to the working tree.
         scope.currentIndex = 1
         type.currentIndex = 0
         issue.text = "m-12345"

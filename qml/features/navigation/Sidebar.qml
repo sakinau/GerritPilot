@@ -14,6 +14,7 @@ Rectangle {
 
     signal toggleRequested()
     signal syncRequested()
+    signal batchPushRequested()
 
     function openProjectManager(tabIndex) {
         if (typeof tabIndex === "number")
@@ -113,6 +114,7 @@ Rectangle {
             Layout.fillHeight: true
             workspace: root.workspace
             onSyncRequested: root.syncRequested()
+            onBatchPushRequested: root.batchPushRequested()
         }
 
         BranchList {

@@ -13,6 +13,7 @@ Item {
     function openUpstream() { upstreamDialog.open() }
     function commit(message, amend, stageAll) { root.workspace.commitActive(message, amend, stageAll) }
     function openPush() { pushDialog.open() }
+    function openChangeDownload() { changeDialog.open() }
 
     AppDialog {
         id: syncDialog
@@ -32,18 +33,19 @@ Item {
             if (!root.workspace) return "未选择任何仓库"
             if (syncMethod === 1 && typeof root.workspace.syncPreview === "function")
                 return root.workspace.syncPreview(syncScope, 1)
+            const pullCommand = root.workspace.pullRebase ? "pull --rebase" : "pull --ff-only"
             if (syncScope === 0) {
                 if (!hasActiveRepo) return "未选择任何仓库"
                 const repoPath = root.workspace.selectedPath
                 const repoName = root.workspace.selectedName || repoPath
-                return "git -C " + repoPath + " pull --ff-only"
+                return "git -C " + repoPath + " " + pullCommand
                     + (repoName ? " (" + repoName + ")" : "")
             } else if (syncScope === 1) {
                 if (checkedCount <= 0) return "未勾选任何仓库"
-                return "git pull --ff-only（已勾选 " + checkedCount + " 个仓库）"
+                return "git " + pullCommand + "（已勾选 " + checkedCount + " 个仓库）"
             } else if (syncScope === 2) {
                 if (totalCount <= 0) return "无可用仓库"
-                return "git pull --ff-only（全部 " + totalCount + " 个仓库）"
+                return "git " + pullCommand + "（全部 " + totalCount + " 个仓库）"
             }
             return "未选择任何仓库"
         }
@@ -94,7 +96,9 @@ Item {
             Text {
                 text: syncDialog.syncMethod === 1
                     ? "按当前本地 Manifest 同步代码，不需要 Git 上游分支。"
-                    : "通过快进（fast-forward）拉取所选仓库的 Git 上游分支。"
+                    : root.workspace && root.workspace.pullRebase
+                        ? "拉取所选仓库的 Git 上游分支，并把本地未合入的提交变基到最新代码之后（保留 Change-Id）。"
+                        : "通过快进（fast-forward）拉取所选仓库的 Git 上游分支。"
                 Layout.fillWidth: true
                 wrapMode: Text.Wrap
                 color: Theme.text
@@ -115,6 +119,30 @@ Item {
                     enabled: syncDialog.repoAvailable
                     onClicked: syncDialog.syncMethod = 1
                 }
+            }
+
+            RowLayout {
+                visible: syncDialog.syncMethod === 0
+                spacing: 14
+                AppRadioButton {
+                    text: "仅快进"
+                    checked: root.workspace && !root.workspace.pullRebase
+                    onClicked: root.workspace.pullRebase = false
+                }
+                AppRadioButton {
+                    text: "变基（Rebase，Gerrit 推荐）"
+                    checked: root.workspace && root.workspace.pullRebase
+                    onClicked: root.workspace.pullRebase = true
+                }
+            }
+
+            Text {
+                visible: syncDialog.syncMethod === 0 && root.workspace && root.workspace.pullRebase
+                text: "需要干净的工作区；如发生冲突，变基会暂停，可在改动列表解决后继续或终止。"
+                Layout.fillWidth: true
+                wrapMode: Text.Wrap
+                color: Theme.secondaryText
+                font.pixelSize: Theme.fontSecondary
             }
 
             Text {
@@ -313,6 +341,24 @@ Item {
         property string selectedTargetBranch: ""
         property string currentTopic: ""
         property string currentRemote: ""
+        property string currentReviewers: ""
+        property string currentCc: ""
+        property string currentHashtags: ""
+        property int workState: 0 // 0 keep, 1 WIP, 2 ready
+        property bool privateChange: false
+        property string patchsetMessage: ""
+        property bool showAdvanced: false
+        readonly property var pushOptions: ({
+            topic: currentTopic.trim(),
+            reviewers: currentReviewers,
+            cc: currentCc,
+            hashtags: currentHashtags,
+            workState: workState,
+            private: privateChange,
+            message: patchsetMessage
+        })
+        readonly property string optionsError: root.workspace && typeof root.workspace.pushOptionsError === "function"
+            ? root.workspace.pushOptionsError(pushOptions) : ""
         readonly property var filteredBranchChoices: {
             const query = branchSearchInput.text.trim().toLowerCase()
             if (!query.length) return candidateBranches
@@ -337,20 +383,15 @@ Item {
             return list
         }
 
-        readonly property string previewCommand: {
-            const r = currentRemote.trim() || "origin"
-            const b = selectedTargetBranch.trim()
-            if (!b) return "未指定目标分支"
-            let ref = "HEAD:refs/for/" + b
-            if (currentTopic.trim().length > 0)
-                ref += "%topic=" + currentTopic.trim()
-            return "git push " + r + " " + ref
-        }
+        readonly property string previewCommand: root.workspace
+            ? root.workspace.pushCommandPreview(currentRemote, selectedTargetBranch.trim(), pushOptions)
+            : "未指定目标分支"
 
         readonly property bool branchExists: root.workspace && root.workspace.remoteBranchesLoaded
             && root.workspace.remoteBranchesRemote === currentRemote.trim()
             && root.workspace.remoteBranches.indexOf(selectedTargetBranch.trim()) !== -1
         readonly property bool canPush: branchExists
+                                        && optionsError.length === 0
                                         && currentRemote.trim().length > 0
                                         && (!root.workspace || !root.workspace.busy)
 
@@ -380,9 +421,21 @@ Item {
                 : ""
             selectedTargetBranch = initialBranch
             currentTopic = root.workspace ? (root.workspace.topic || "") : ""
+            // Reviewers and CC persist per repository; the remaining options apply to one push.
+            currentReviewers = root.workspace ? (root.workspace.reviewers || "") : ""
+            currentCc = root.workspace ? (root.workspace.cc || "") : ""
+            currentHashtags = ""
+            workState = 0
+            privateChange = false
+            patchsetMessage = ""
+            showAdvanced = false
 
             branchSearchInput.text = ""
             topicInput.text = currentTopic
+            reviewersInput.text = currentReviewers
+            ccInput.text = currentCc
+            hashtagsInput.text = ""
+            messageInput.text = ""
             remoteInput.text = currentRemote
             if (root.workspace && typeof root.workspace.requestRemoteBranches === "function")
                 root.workspace.requestRemoteBranches(currentRemote)
@@ -396,7 +449,14 @@ Item {
                 root.workspace.remote = pushDialog.currentRemote.trim()
                 root.workspace.targetBranch = pushDialog.selectedTargetBranch.trim()
                 root.workspace.topic = pushDialog.currentTopic.trim()
-                root.workspace.pushActive()
+                root.workspace.reviewers = pushDialog.currentReviewers
+                root.workspace.cc = pushDialog.currentCc
+                root.workspace.pushActive({
+                    hashtags: pushDialog.currentHashtags,
+                    workState: pushDialog.workState,
+                    private: pushDialog.privateChange,
+                    message: pushDialog.patchsetMessage
+                })
             }
         }
 
@@ -411,11 +471,12 @@ Item {
 
             Rectangle {
                 Layout.fillWidth: true
-                Layout.preferredHeight: 56
+                Layout.preferredHeight: Math.max(56, pushPreviewText.implicitHeight + 20)
                 color: Theme.accentSoft
                 radius: Theme.radiusMedium
                 border.color: Theme.tones.info.border
                 Text {
+                    id: pushPreviewText
                     anchors.fill: parent
                     anchors.margins: 10
                     text: pushDialog.previewCommand
@@ -546,6 +607,36 @@ Item {
                 }
 
                 Text {
+                    text: "评审人（可选）："
+                    color: Theme.tertiaryText
+                    font.pixelSize: Theme.fontSecondary
+                    Layout.alignment: Qt.AlignVCenter
+                }
+                AppTextField {
+                    id: reviewersInput
+                    objectName: "reviewersInput"
+                    Layout.fillWidth: true
+                    font.pixelSize: Theme.fontSecondary
+                    placeholderText: "用户名或邮箱，多个用逗号分隔"
+                    onTextChanged: pushDialog.currentReviewers = text
+                }
+
+                Text {
+                    text: "抄送（可选）："
+                    color: Theme.tertiaryText
+                    font.pixelSize: Theme.fontSecondary
+                    Layout.alignment: Qt.AlignVCenter
+                }
+                AppTextField {
+                    id: ccInput
+                    objectName: "ccInput"
+                    Layout.fillWidth: true
+                    font.pixelSize: Theme.fontSecondary
+                    placeholderText: "用户名或邮箱，多个用逗号分隔"
+                    onTextChanged: pushDialog.currentCc = text
+                }
+
+                Text {
                     text: "Gerrit 服务器："
                     color: Theme.tertiaryText
                     font.pixelSize: Theme.fontSecondary
@@ -561,8 +652,89 @@ Item {
                 }
             }
 
+            PrimaryButton {
+                text: pushDialog.showAdvanced ? "收起更多选项" : "更多选项（WIP / 私有 / Hashtag / 补丁集说明）"
+                kind: "plain"
+                compact: true
+                iconName: pushDialog.showAdvanced ? "chevron-up" : "chevron-down"
+                onClicked: pushDialog.showAdvanced = !pushDialog.showAdvanced
+            }
+
+            GridLayout {
+                visible: pushDialog.showAdvanced
+                Layout.fillWidth: true
+                columns: 2
+                rowSpacing: 10
+                columnSpacing: 12
+
+                Text {
+                    text: "评审状态："
+                    color: Theme.tertiaryText
+                    font.pixelSize: Theme.fontSecondary
+                    Layout.alignment: Qt.AlignVCenter
+                }
+                SegmentedControl {
+                    compact: true
+                    model: ["保持不变", "标记 WIP", "标记可评审"]
+                    currentIndex: pushDialog.workState
+                    onActivated: index => pushDialog.workState = index
+                }
+
+                Text {
+                    text: "可见性："
+                    color: Theme.tertiaryText
+                    font.pixelSize: Theme.fontSecondary
+                    Layout.alignment: Qt.AlignVCenter
+                }
+                FlatCheckBox {
+                    text: "设为私有 Change（仅自己和评审人可见）"
+                    controlled: true
+                    checked: pushDialog.privateChange
+                    onToggled: checked => pushDialog.privateChange = checked
+                }
+
+                Text {
+                    text: "Hashtag："
+                    color: Theme.tertiaryText
+                    font.pixelSize: Theme.fontSecondary
+                    Layout.alignment: Qt.AlignVCenter
+                }
+                AppTextField {
+                    id: hashtagsInput
+                    objectName: "hashtagsInput"
+                    Layout.fillWidth: true
+                    font.pixelSize: Theme.fontSecondary
+                    placeholderText: "多个用逗号分隔，例如 hotfix, v2.1"
+                    onTextChanged: pushDialog.currentHashtags = text
+                }
+
+                Text {
+                    text: "补丁集说明："
+                    color: Theme.tertiaryText
+                    font.pixelSize: Theme.fontSecondary
+                    Layout.alignment: Qt.AlignVCenter
+                }
+                AppTextField {
+                    id: messageInput
+                    objectName: "patchsetMessageInput"
+                    Layout.fillWidth: true
+                    font.pixelSize: Theme.fontSecondary
+                    placeholderText: "显示在 Gerrit 评审记录中，例如“按评审意见修改”"
+                    onTextChanged: pushDialog.patchsetMessage = text
+                }
+            }
+
             Text {
-                visible: !pushDialog.canPush
+                visible: pushDialog.optionsError.length > 0
+                text: pushDialog.optionsError
+                color: Theme.red
+                font.pixelSize: Theme.fontSecondary
+                wrapMode: Text.Wrap
+                Layout.fillWidth: true
+            }
+
+            Text {
+                visible: !pushDialog.canPush && pushDialog.optionsError.length === 0
                 text: pushDialog.selectedTargetBranch.trim().length === 0
                     ? "请输入关键词并从远端目标分支中选择。"
                     : "请选择远端存在的完整分支名，并确认推送远端。"
@@ -572,7 +744,7 @@ Item {
             }
 
             Text {
-                text: "上传后会在 Gerrit 中创建或更新 Change；目标分支与 Topic 会自动保存供下次使用。"
+                text: "上传后会在 Gerrit 中创建或更新 Change；目标分支、Topic、评审人与抄送会自动保存供下次使用。"
                 color: Theme.tertiaryText
                 font.pixelSize: Theme.fontCaption
                 wrapMode: Text.Wrap
@@ -581,4 +753,89 @@ Item {
         }
     }
 
+    AppDialog {
+        id: changeDialog
+        objectName: "changeDialog"
+        preferredWidth: 520
+        title: "下载 Gerrit Change"
+        standardButtons: Dialog.Cancel | Dialog.Ok
+        property int mode: 0 // 0 new branch, 1 cherry-pick, 2 detached checkout
+        readonly property bool canFetch: root.workspace && !root.workspace.busy
+            && root.workspace.selectedPath.length > 0 && changeInput.text.trim().length > 0
+
+        function updateOkButton() {
+            const okBtn = changeDialog.standardButton(Dialog.Ok)
+            if (okBtn) {
+                okBtn.enabled = canFetch
+                okBtn.text = "下载"
+            }
+        }
+
+        onOpened: {
+            changeInput.text = ""
+            mode = 0
+            updateOkButton()
+            changeInput.forceActiveFocus()
+        }
+        onCanFetchChanged: updateOkButton()
+        onAccepted: {
+            if (canFetch)
+                root.workspace.fetchChange(changeInput.text.trim(), mode)
+        }
+
+        contentItem: ColumnLayout {
+            spacing: 10
+            Text {
+                Layout.fillWidth: true
+                text: root.workspace ? ("当前仓库：" + root.workspace.selectedName + " · 远端：" + (root.workspace.remote || "origin")) : ""
+                color: Theme.text
+                font.pixelSize: Theme.fontSecondary
+                wrapMode: Text.Wrap
+            }
+            AppTextField {
+                id: changeInput
+                objectName: "changeInput"
+                Layout.fillWidth: true
+                font.pixelSize: Theme.fontSecondary
+                placeholderText: "Change 号（12345 或 12345/3）、评审链接或 refs/changes/..."
+                onAccepted: if (changeDialog.canFetch) changeDialog.accept()
+            }
+            Text {
+                Layout.fillWidth: true
+                text: "未指定补丁集时自动下载最新补丁集。Change 必须属于当前仓库。"
+                color: Theme.tertiaryText
+                font.pixelSize: Theme.fontCaption
+                wrapMode: Text.Wrap
+            }
+            ColumnLayout {
+                spacing: 6
+                AppRadioButton {
+                    text: "检出到新的本地分支 review/<Change>-<补丁集>"
+                    checked: changeDialog.mode === 0
+                    onClicked: changeDialog.mode = 0
+                }
+                AppRadioButton {
+                    text: "摘取（Cherry-pick）到当前分支"
+                    checked: changeDialog.mode === 1
+                    onClicked: changeDialog.mode = 1
+                }
+                AppRadioButton {
+                    text: "仅检出查看（detached HEAD）"
+                    checked: changeDialog.mode === 2
+                    onClicked: changeDialog.mode = 2
+                }
+            }
+            Text {
+                Layout.fillWidth: true
+                text: changeDialog.mode === 0
+                    ? "适合接手或基于该 Change 继续修改；在新分支上修订后推送会更新原 Change。"
+                    : changeDialog.mode === 1
+                        ? "摘取的提交保留原 Change-Id：推送到同一目标分支会更新原 Change，推送到其他分支会创建新的 Change。"
+                        : "适合评审时运行或编译验证；完成后可在分支列表切回原分支。"
+                color: Theme.secondaryText
+                font.pixelSize: Theme.fontCaption
+                wrapMode: Text.Wrap
+            }
+        }
+    }
 }

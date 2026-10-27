@@ -8,6 +8,7 @@ ColumnLayout {
     id: root
     property var workspace
     signal syncRequested()
+    signal batchPushRequested()
 
     spacing: 6
 
@@ -40,6 +41,15 @@ ColumnLayout {
             implicitWidth: 24
             implicitHeight: 24
             onClicked: root.workspace.selectAll(false)
+        }
+        IconButton {
+            visible: root.workspace && root.workspace.selectedCount > 0
+            iconName: "upload"
+            toolTip: "批量推送已勾选的 " + (root.workspace ? root.workspace.selectedCount : 0) + " 个仓库到 Gerrit…"
+            implicitWidth: 24
+            implicitHeight: 24
+            enabled: root.workspace && !root.workspace.busy
+            onClicked: root.batchPushRequested()
         }
         IconButton {
             iconName: "download"

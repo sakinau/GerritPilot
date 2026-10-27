@@ -24,6 +24,7 @@ GlassCard {
     signal syncRequested()
     signal commitRequested(string message, bool amend, bool stageAll)
     signal pushRequested()
+    signal changeDownloadRequested()
 
     property var selectedChangePaths: []
     readonly property var selectedConflictPaths: {
@@ -87,6 +88,7 @@ GlassCard {
             onBranchRequested: root.branchRequested()
             onSettingsRequested: root.settingsRequested()
             onPushRequested: root.pushRequested()
+            onChangeDownloadRequested: root.changeDownloadRequested()
             onCommandLogRequested: root.openCommandPanel()
             onStashRequested: {
                 root.workspace.loadStashList()
@@ -193,6 +195,7 @@ GlassCard {
                 onRevisionCheckoutRequested: revision => confirmDialogs.confirmCheckout(revision)
                 onCherryPickRequested: revision => confirmDialogs.confirmCherryPick(revision)
                 onRevertRequested: revision => confirmDialogs.confirmRevert(revision)
+                onRewriteRequested: (revision, subject) => confirmDialogs.confirmRewrite(revision, subject)
             }
         }
     }
