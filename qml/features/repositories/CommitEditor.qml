@@ -413,7 +413,7 @@ Item {
                 Item { Layout.fillWidth: true }
                 PrimaryButton {
                     text: aiDialog.generating ? "取消生成" : "关闭"
-                    secondary: true
+                    kind: "gray"
                     onClicked: {
                         if (aiDialog.generating && root.workspace) {
                             if (root.workspace.commitAi && root.workspace.commitAi.busy)

@@ -4,7 +4,7 @@ import QtQuick.Layouts
 import GerritPilot
 
 // iOS button styles:
-//   filled  - solid accent (default)       gray   - neutral fill (`secondary: true`)
+//   filled  - solid accent (default)       gray   - neutral fill
 //   tinted  - accent tint with accent text plain  - text only, fill on hover
 //   danger  - solid red                     dangerTinted - red tint with red text
 Button {
@@ -12,10 +12,8 @@ Button {
     property string glyph: ""
     property string iconName: ""
     property string toolTip: ""
-    property bool secondary: false
-    property bool danger: false
     property bool compact: false
-    property string kind: danger ? "danger" : secondary ? "gray" : "filled"
+    property string kind: "filled"
 
     readonly property bool solid: kind === "filled" || kind === "danger"
     readonly property color foreground: {

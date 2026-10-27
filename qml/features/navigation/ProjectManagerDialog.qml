@@ -84,7 +84,7 @@ AppDialog {
                 ColumnLayout {
                     visible: root.currentTab === 2
                     Layout.fillWidth: true
-                    PrimaryButton { text: "打开当前项目 Manifest 目录"; secondary: true; visible: root.workspace && root.workspace.isRepoWorkspace; enabled: root.idle; onClicked: root.repoManager.openManifest() }
+                    PrimaryButton { text: "打开当前项目 Manifest 目录"; kind: "gray"; visible: root.workspace && root.workspace.isRepoWorkspace; enabled: root.idle; onClicked: root.repoManager.openManifest() }
                     Repeater {
                         model: root.workspace && root.workspace.projectManager ? root.workspace.projectManager.projectList : []
                         delegate: Rectangle {
@@ -129,7 +129,7 @@ AppDialog {
             Layout.fillWidth: true
             Spinner { running: parent.visible; Layout.preferredWidth: 24; Layout.preferredHeight: 24 }
             Text { text: root.repoManager ? root.repoManager.activeTask : ""; color: Theme.text; font.pixelSize: Theme.fontSecondary; Layout.fillWidth: true; elide: Text.ElideRight }
-            PrimaryButton { text: "取消操作"; secondary: true; onClicked: root.repoManager.cancel() }
+            PrimaryButton { text: "取消操作"; kind: "gray"; onClicked: root.repoManager.cancel() }
         }
         FlatCheckBox { id: logToggle; text: "执行日志"; visible: root.repoManager && root.repoManager.log.length > 0 }
         ScrollView {

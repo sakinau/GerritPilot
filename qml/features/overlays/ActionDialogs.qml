@@ -216,7 +216,7 @@ Item {
 
             PrimaryButton {
                 text: "设置当前仓库拉取上游"
-                secondary: true
+                kind: "gray"
                 visible: syncDialog.syncMethod === 0
                 enabled: root.workspace && syncDialog.hasActiveRepo && !root.workspace.busy
                 onClicked: {

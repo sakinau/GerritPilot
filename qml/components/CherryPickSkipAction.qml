@@ -7,7 +7,7 @@ PrimaryButton {
     property var confirmation: ({})
     objectName: "skipCherryPickButton"
     text: "跳过当前提交"
-    secondary: true
+    kind: "gray"
     visible: workspace ? Boolean(workspace.canSkipCherryPick) : false
     enabled: workspace && workspace.canSkipCherryPick && !workspace.busy
     toolTip: "仅跳过没有剩余改动的当前拣选提交"

@@ -55,7 +55,7 @@ Item {
             PrimaryButton {
                 objectName: "errorUpstreamButton"
                 text: "为当前仓库设置拉取上游"
-                secondary: true
+                kind: "gray"
                 visible: dialog.actions.indexOf("upstream") !== -1
                 enabled: root.canApply(dialog.failure)
                 onClicked: {
@@ -67,7 +67,7 @@ Item {
             PrimaryButton {
                 objectName: "errorConflictButton"
                 text: "查看冲突文件"
-                secondary: true
+                kind: "gray"
                 visible: dialog.actions.indexOf("conflicts") !== -1
                 enabled: root.canApply(dialog.failure)
                 onClicked: {
@@ -79,7 +79,7 @@ Item {
             PrimaryButton {
                 objectName: "errorHookButton"
                 text: dialog.actions.indexOf("resumeCommit") !== -1 ? "安装 Hook 并继续提交" : "安装 Change-Id Hook"
-                secondary: true
+                kind: "gray"
                 visible: dialog.actions.indexOf("installHook") !== -1
                 enabled: root.canApply(dialog.failure)
                 onClicked: {
@@ -92,7 +92,7 @@ Item {
             PrimaryButton {
                 objectName: "errorRepairButton"
                 text: "修订最近提交的 Change-Id"
-                secondary: true
+                kind: "gray"
                 visible: dialog.actions.indexOf("repairChangeId") !== -1
                 enabled: root.canApply(dialog.failure)
                 onClicked: {
