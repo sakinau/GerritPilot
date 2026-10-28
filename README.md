@@ -1,92 +1,75 @@
-# GerritPilot Next
+# GerritPilot
 
-使用 Qt 6.8.3、QML 和 C++ 开发的 `repo + Gerrit` 多仓代码管理工具。界面采用受 iOS/macOS 启发的设计语言：低噪声色彩、分层卡片、圆角操作控件、侧栏导航和明确的确认流程。
+GerritPilot 是一款面向 Git、Repo 和 Gerrit 工作流的 Linux 桌面工具。它将多仓库状态、代码改动、提交和 Gerrit 评审操作集中在一个界面中，也支持打开普通的单 Git 仓库。
 
-> 完整项目文档已统一沉淀至项目知识库：**[code/Readme/GerritPilot](/home/liushuai/code/Readme/GerritPilot/README.md)**
-> - [功能与操作指南](/home/liushuai/code/Readme/GerritPilot/功能与操作指南.md)
-> - [系统架构与核心设计](/home/liushuai/code/Readme/GerritPilot/系统架构与核心设计.md)
-> - [构建部署与验收规范](/home/liushuai/code/Readme/GerritPilot/构建部署与验收规范.md)
+> 项目目前处于早期试用阶段。真实 Gerrit 服务、AI 接口和不同 Linux 环境的兼容性仍在完善；建议先在测试仓库中熟悉操作。
 
-## 当前能力
+## 主要功能
 
-- 读取 `.repo/project.list` 或单 Git 仓库
-- 异步检查所有仓库的分支、改动数和 ahead/behind 状态
-- 查看按最近提交排序的本地分支，并安全切换或基于当前 HEAD 新建分支
-- 日常拉取始终使用各 Git 分支的上游（仅快进，不自动 rebase/stash）；不会因存在 `.repo` 而改用 repo sync
-- 设置中的“添加项目 · Repo 初始化”支持导入本地 Git/repo 项目，以及在空目录 init → 检查 Manifest → 全量 sync
-- 查看当前仓库的改动与支持分页及搜索的结构化提交历史
-- 暂存改动、创建提交或 amend
-- 推送 `HEAD:refs/for/<branch>`，支持 Gerrit Topic
-- 从 Gerrit 安装 `commit-msg` Change-Id Hook
-- 所有进程调用均通过 `QProcess(program, arguments)`，不保存 SSH 密码、不拼接 Shell
-- 工作区和 Gerrit 配置通过 `QSettings` 持久化，支持按仓库草稿与配置隔离
+- **项目与仓库**：导入本地 Git 或 Repo 项目，查看仓库状态、分支和提交历史；支持初始化新的 Repo 项目。
+- **代码改动**：查看文件 Diff，按文件或改动块暂存，填写提交说明并创建或修改本地提交。
+- **同步代码**：按分支上游执行 Git 拉取，也可对 Repo 项目按 Manifest 同步；支持处理变基和摘取冲突。
+- **Gerrit 评审**：推送单个或多个仓库，设置目标分支、Topic 和评审人；下载 Change，检查及安装 Change-Id Hook。
+- **AI 提交说明**：使用兼容 Chat Completions 的接口，根据选定改动生成提交说明，生成后仍可人工检查和编辑。
 
-## Qt 环境隔离与验证
+## 环境要求
 
-本工程固定使用独立安装的 Qt 6.8.3，不修改系统默认 Qt 5.6.3：
+- Linux x86-64 图形桌面。当前试用包尚未在无 Qt SDK 的干净环境完成验证。
+- 已安装 Git；使用 Repo 多仓项目时还需要 `repo` 命令。
+- 访问远程仓库或 Gerrit 时，需预先配置可用的网络、SSH 密钥或 HTTPS 凭据，以及相应的仓库权限。
 
-```text
-/home/liushuai/Qt6.8.3/6.8.3/gcc_64
-```
+## 启动
 
-在 Qt Creator 中配置 Kit 时，选择：
+### 使用试用包
 
-```text
-CMake: /home/liushuai/Qt6.8.3/6.8.3/gcc_64/bin/qt-cmake
-qmake: /home/liushuai/Qt6.8.3/6.8.3/gcc_64/bin/qmake6
-```
-
-命令行构建与测试：
+获取内部试用压缩包后，在终端进入压缩包所在目录：
 
 ```bash
-cmake --build /home/liushuai/code/build-GerritPilotNext-Qt6-Debug --parallel 4
-ctest --test-dir /home/liushuai/code/build-GerritPilotNext-Qt6-Debug --output-on-failure
-env QT_QPA_PLATFORM=offscreen QT_QUICK_CONTROLS_STYLE=Basic QML_DISABLE_DISK_CACHE=1 \
-  /home/liushuai/Qt6.8.3/6.8.3/gcc_64/bin/qmltestrunner \
-  -import /home/liushuai/code/GerritPilotNext/tests/imports \
-  -input /home/liushuai/code/GerritPilotNext/tests
+tar -xzf GerritPilot-v0.1.0-beta.1-linux-x86_64-internal-20261028.tar.gz
+cd GerritPilot-v0.1.0-beta.1-linux-x86_64-internal-20261028
+./bin/gerritpilot
 ```
 
-## 工程结构
+该包当前用于内部试用，尚未作为 GitHub Release 发布；后续版本的文件名可能不同。
 
-```text
-GerritPilotNext/
-├── CMakeLists.txt
-├── packaging/gerritpilot.desktop  # Linux 桌面入口
-├── qml/
-│   ├── App.qml
-│   ├── Theme.qml                  # 设计 Token：iOS 系统色、填充、语义色调、Diff 配色、圆角/间距/动效
-│   ├── assets/gerritpilot.svg     # 应用 Logo（窗口图标、侧栏品牌、桌面图标共用）
-│   ├── pages/WorkspacePage.qml
-│   ├── features/
-│   │   ├── navigation/            # Sidebar = ProjectSwitcher + RepositoryList/Row + BranchList + WorkspaceStatusCard
-│   │   ├── repositories/          # RepositoryDetailPane = RepositoryToolbar + OperationBanner + DiffToolbar
-│   │   │                          #   + ChangesFileList/CommitEditor/HistoryPane + CommandLogPopup + ConfirmDialogs
-│   │   └── overlays/              # 推送/拉取/分支/设置/错误弹窗
-│   └── components/                # 设计系统组件（见下）
-├── src/                           # C++ 控制器、Git/Gerrit 服务与解析器
-└── qa/                            # QML 视觉测试与源码约束检查
+### 从源码构建
+
+需要 C++17 编译器、CMake 3.21 或更新版本，以及包含 Quick、Quick Controls 2、Network 和 SVG 的 Qt 6.8 开发环境。以下命令由使用者在项目根目录执行，将 Qt 路径替换为本机的实际安装位置：
+
+```bash
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_PREFIX_PATH=/path/to/Qt/6.8.3/gcc_64
+cmake --build build --target gerritpilot -j4
+./build/gerritpilot
 ```
 
-### 设计系统组件（qml/components）
+如果系统已能找到合适的 Qt，可以省略 `CMAKE_PREFIX_PATH`。安装到指定目录可使用 `cmake --install build --prefix /path/to/install`。
 
-| 组件 | 用途 |
-|------|------|
-| `Icon` + `Icons.js` | 矢量线性图标（24 栅格，圆角端点，参照 Lucide/ISC），替代 Unicode 符号 |
-| `PrimaryButton` | `kind`: filled / gray / tinted / plain / danger / dangerTinted，`compact` 小尺寸 |
-| `IconButton`、`FileActionButton`、`ToggleChip` | 工具栏图标按钮、行内操作、可勾选胶囊 |
-| `SegmentedControl` | iOS 分段控件（主视图切换、统一/左右 Diff） |
-| `SearchField` | iOS 搜索框（放大镜 + 清除按钮 + 尾部插槽） |
-| `Badge`、`Avatar`、`Spinner` | 胶囊徽标、作者头像、iOS 风格加载指示 |
-| `Banner`、`SectionHeader`、`SettingsGroup` | 语义提示条、分组标题、iOS 分组设置卡片 |
-| `AppDialog`、`FloatingSurface`、`AppMenu(Item)` | 弹窗/浮层（软阴影，软件渲染下同样可用）、菜单 |
-| `AppTextField`、`AppComboBox`、`AppRadioButton`、`AppSpinBox` | 统一样式的表单控件 |
+## 快速上手
 
-新增界面时优先组合以上组件，颜色只引用 `Theme` Token，不在页面中硬编码色值。
+1. 启动后，在左上角项目切换器选择 **添加项目**，选择包含 `.git` 的 Git 仓库或包含 `.repo` 的 Repo 项目根目录。导入已有项目不会自动联网。
+2. 在左侧选择仓库，查看当前分支和改动；在 **工作区改动** 中查看 Diff，并暂存需要提交的文件或改动块。
+3. 在 **提交说明** 中填写内容，点击 **提交** 创建本地提交。需要更新最近一次提交时，可选择 **修改上次提交**；此操作会改写该提交。
+4. 使用 **拉取代码** 更新分支。Git 拉取使用当前分支配置的上游；Repo 同步按 Manifest 工作，两者的目标可能不同。
+5. 需要代码评审时，点击 **推送**，确认远端、Gerrit 目标分支和其他选项后推送。推送前会检查待上传提交的 Change-Id；多个仓库可从仓库列表选择批量推送。
 
-## 设计原则
+新建 Repo 项目时，在项目管理中填写空目录和 Manifest 信息并执行初始化；初始化后按需检查 Manifest，再手动选择 Repo 同步整个项目。
 
-1. 批量操作以“勾选仓库”为上下文，单仓操作以“当前仓库”为上下文。
-2. 分支切换、新建分支、同步、提交和上传等写操作在执行前展示目标或实际命令。
-3. 状态颜色只用于表达含义：绿色为干净、橙色为本地改动、紫色为待上传、红色为错误。
-4. Qt 6 仅在项目 Kit 中显式启用，不覆盖任何已有 Qt 环境。
+## AI 生成提交说明
+
+在 **设置 → AI 提交说明** 中填写接口 Base URL（或完整的 `/chat/completions` 地址）、模型名称和 API Key，然后点击 **测试连接**。也可以通过环境变量 `GERRITPILOT_AI_API_KEY` 提供密钥；选择“记住 API Key”时，密钥会明文保存在本机设置中。
+
+在提交面板点击 **AI 生成**，选择改动范围、提交类型并填写关联单号。当前生成规则适配 smart-commit v2.0：单号为非全零的 10 位数字，修复提交需要同时填写问题单和需求单。仅在确实完成编译验证后勾选相应选项。
+
+生成时，所选范围的文件信息和 Diff 片段会发送给配置的 AI 接口；请确认代码适合发送。**测试连接不会上传代码。**生成结果应在提交前人工核对。
+
+## 常见问题
+
+- **拉取提示没有上游或无法快进**：检查当前分支的上游；如果有本地提交，可在确认工作区状态后选择变基拉取。遇到冲突时先解决冲突，再在界面中继续或终止。
+- **Gerrit 推送提示缺少 Change-Id**：按界面提示检查或安装 `commit-msg` Hook。程序可在确认后修订最近一次提交以补充 Change-Id；较早的提交需要逐一处理。
+- **SSH 或 HTTPS 操作失败**：先在终端检查远端地址、网络和认证。SSH 可检查 `~/.ssh/config`；HTTPS 可先在终端配置 Git 凭据并执行一次 `git fetch`。
+- **AI 无法生成**：检查接口地址、模型、密钥和网络；确认已选择有改动的范围，并填写符合规则的关联单号。
+
+## 许可证
+
+本项目源码采用 [MIT License](LICENSE)。分发包包含的第三方组件适用各自的许可证；公开发布材料仍在整理中。
